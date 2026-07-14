@@ -163,13 +163,25 @@ the sharing degree and is what makes sharing cost area, not just time.
 
 \subsection{Scaling laws}
 \begin{align}
+  \twl &= k^{\mathrm{wire}}_{WL}\,\Nbl^2 + k^{\mathrm{cell}}_{WL}\,\Nbl, &
+  \tbl &= k^{\mathrm{wire}}_{BL}\,\Nwl^2 + k^{\mathrm{cell}}_{BL}\,\Nwl, \\
   \Voldec &\propto \Nwl\cdot\Nbl \propto \Volarr, &
   \Volsa  &\propto \frac{1}{\mathrm{margin}^2}.
   \label{eq:scaling}
 \end{align}
-Decoder volume tracks the array it drives; sense-amp volume follows the Pelgrom
-offset law $\Asa\propto 1/\mathrm{margin}^2$, so tighter sensing margins cost
-quadratic area.
+Each develop time separates into a \emph{wire} self-RC term and a \emph{cell}
+loading term. The wire term is the distributed-line delay $\tfrac12 r c L^2$
+(the CACTI-6 $n(n{+}1)rc/2$ form) with $L$ set by the number of cells along the
+line, hence quadratic; its coefficient $k^{\mathrm{wire}}=\tfrac12 rc$ is fixed
+by the BEOL metal stack and node ($\times$ tier count in monolithic 3D) and is
+therefore \emph{shared} across cell technologies on the same wire stack. The
+cell term is the storage/access-device capacitance charged through the access
+resistance, roughly linear in the cells on the line, and is the knob set
+\emph{per technology} ($k^{\mathrm{cell}}$: DRAM storage cap, gain-cell read-FET
+gate cap, memristor device cap, \dots). Together they are what makes large
+unsegmented arrays expensive. Decoder volume tracks the array it drives;
+sense-amp volume follows the Pelgrom offset law $\Asa\propto 1/\mathrm{margin}^2$,
+so tighter sensing margins cost quadratic area.
 
 \section{Derived structure}
 \label{sec:derived}

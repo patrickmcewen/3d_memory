@@ -88,7 +88,9 @@ $\Voldec,\Volsel$ & decoder, selector volume \\
   \mathrm{Vol} &= \Volarr\Ntot + \Volsa\Nsa
                  + \Voldec\Ndec + \Volsel(\Nshare) \\[0.3ex]
   \Voldec &\propto \Nwl\Nbl \propto \Volarr, \quad
-  \Volsa \propto \tfrac{1}{\mathrm{margin}^2}
+  \Volsa \propto \tfrac{1}{\mathrm{margin}^2} \\[0.3ex]
+  \twl &= k^{\mathrm{w}}_{WL}\Nbl^2 + k^{\mathrm{c}}_{WL}\Nbl \quad\text{\scriptsize(wire self-RC + cell load)} \\[0.2ex]
+  \tbl &= k^{\mathrm{w}}_{BL}\Nwl^2 + k^{\mathrm{c}}_{BL}\Nwl \quad\text{\scriptsize($k^{\mathrm{w}}$ shared, $k^{\mathrm{c}}$ per-tech)}
 \end{align*}
 \end{block}
 

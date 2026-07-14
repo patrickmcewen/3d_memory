@@ -33,11 +33,11 @@ DEFAULT_AMPL = Path(
 # assert a config is complete (fail loud on a missing/extra key).
 PARAMS = {
     "problem": ["C", "A", "L", "t_layer"],
-    "technology": ["k_dec", "k_WL", "k_BL", "t_SA0", "t_restore", "destructive",
-                   "t_sw", "v_cell", "v_sa0", "k_vdec", "v_sel"],
+    "technology": ["k_dec", "k_wire_WL", "k_cell_WL", "k_wire_BL", "k_cell_BL",
+                   "t_SA0", "t_restore", "destructive", "t_sw", "v_cell",
+                   "v_sa0", "k_vdec", "v_sel"],
     "bounds": ["NBL_min", "NBL_max", "NWL_min", "NWL_max", "margin_min",
-               "margin_max", "Nshare_min", "Nshare_max", "Nindep_max",
-               "tcyc_max", "BW_max"],
+               "margin_max", "Nshare_min", "Nshare_max", "Nindep_max", "BW_max"],
 }
 # fix-key -> (min_param, max_param) bound pair it collapses.
 FIXABLE = {

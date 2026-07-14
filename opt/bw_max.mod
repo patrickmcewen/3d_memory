@@ -24,8 +24,14 @@ param VolBudget := A * L * t_layer;   # total 3D volume packed against [um^3]
 #### ---- technology / calibration coefficients ----------------------------
 #### TODO(calibration): placeholder values; replace with a memory_model fit.
 param k_dec     > 0;   # decoder delay per address bit                [ns]
-param k_WL      > 0;   # wordline-develop coeff (per bitline column)  [ns]
-param k_BL      > 0;   # bitline-develop coeff (per wordline row)     [ns]
+# WL/BL develop split into a distributed wire self-RC term (quadratic in the
+# cells along the line; set by the BEOL wire stack + node, so SHAREABLE across
+# cell technologies) and a cell/access loading term (linear; storage/gate/junction
+# cap driven through the access resistance, so PER-TECHNOLOGY).
+param k_wire_WL > 0;   # WL wire self-RC coeff        (per column^2)   [ns]  shared
+param k_cell_WL >= 0;  # WL cell/gate loading coeff   (per column)     [ns]  per-tech
+param k_wire_BL > 0;   # BL wire self-RC coeff        (per row^2)      [ns]  shared
+param k_cell_BL >= 0;  # BL cell/access loading coeff (per row)        [ns]  per-tech
 param t_SA0     > 0;   # base sense time                              [ns]
 param t_restore >= 0;  # restore time for a destructive read          [ns]
 param destructive binary;   # 1 => fold restore into t_SA (DRAM-like)
@@ -41,7 +47,6 @@ param NWL_min > 0; param NWL_max > 0;
 param margin_min > 0; param margin_max > 0;
 param Nshare_min integer > 0; param Nshare_max integer > 0;
 param Nindep_max > 0;
-param tcyc_max > 0;
 param BW_max > 0;
 
 #### ---- decision variables ------------------------------------------------
@@ -51,13 +56,13 @@ var margin  >= margin_min, <= margin_max;       # sensing margin
 var b_acc   >= 1, <= NBL_max;                   # bits per access (sense width)
 var N_share integer >= Nshare_min, <= Nshare_max;# arrays sharing one periph set
 var N_indep >= 1, <= Nindep_max;                # independent peripheral sets
-var t_cycle >= t_SA0 * 0.5, <= tcyc_max;        # steady-state cycle time
+var t_cycle >= t_SA0 * 0.5;        # steady-state cycle time
 var BW      >= 0, <= BW_max;                    # objective
 
 #### ---- defined timing terms (no variable products; log is univariate) ----
 var t_dec = k_dec * log(N_WL) / log(2);         # decode depth ~ log2(rows)
-var t_WL  = k_WL * N_BL;                         # WL spans all columns
-var t_BL  = k_BL * N_WL;                         # BL loaded by all rows
+var t_WL  = k_wire_WL * N_BL^2 + k_cell_WL * N_BL;  # WL: wire self-RC (~L^2) + cell/gate load (~cells)
+var t_BL  = k_wire_BL * N_WL^2 + k_cell_BL * N_WL;  # BL: wire self-RC (~L^2) + cell/access load (~cells)
 var t_SA  = t_SA0 + destructive * t_restore;     # restore folded in iff destructive
 var sum_dev = t_dec + t_WL + t_BL + t_SA + t_sw; # full serial develop latency
 

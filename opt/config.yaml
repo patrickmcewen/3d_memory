@@ -12,8 +12,8 @@ defaults:
 
   # ---- problem inputs (given) ----
   problem:
-    C:       1.0e8      # target capacity                 [bit]  (100 Mbit)
-    A:       1.0e6      # footprint (area per layer)      [um^2] (1 mm^2)
+    C:       1.0e9      # target capacity                 [bit]  (800 Gbit)
+    A:       800.0e6      # footprint (area per layer)      [um^2] (1 mm^2)
     L:       8          # layer budget                    [layers]  (baseline default; named configs override per capacity/cell-size)
     t_layer: 1.0        # physical thickness per layer    [um]
 
@@ -21,8 +21,21 @@ defaults:
   # TODO(calibration): placeholders until a memory_model fit replaces them.
   technology:
     k_dec:       0.02     # decoder delay per address bit          [ns]
-    k_WL:        0.0001   # wordline-develop coeff (per column)    [ns]
-    k_BL:        0.0003   # bitline-develop coeff (per row)        [ns]
+    # WL/BL develop = distributed WIRE self-RC (quadratic, shared) + CELL/access
+    # loading (linear, per-technology):
+    #   t_WL = k_wire_WL*N_BL^2 + k_cell_WL*N_BL     (WL spans N_BL columns)
+    #   t_BL = k_wire_BL*N_WL^2 + k_cell_BL*N_WL     (BL loaded by N_WL rows)
+    # k_wire_* = 1/2 * r_wire * c_wire : set by the BEOL metal stack + node
+    #   (x tier count in monolithic 3D). SHAREABLE across cell technologies that
+    #   sit on the same wire stack -> keep in defaults, override only per node/3D.
+    # k_cell_* = per-cell load (storage/gate/junction cap driven through the
+    #   access/driver R), ~ number of cells on the line. SET PER TECHNOLOGY.
+    #   Baseline below is a gain-cell-ish placeholder; configs override for their cell.
+    # Calibrated so a nominal 512-cell line gives t_WL~0.05 ns, t_BL~1 ns.
+    k_wire_WL:   1.1e-7   # WL wire self-RC     (per column^2)      [ns]  shared
+    k_cell_WL:   4.0e-5   # WL cell/gate load   (per column)        [ns]  per-tech
+    k_wire_BL:   1.2e-6   # BL wire self-RC     (per row^2)         [ns]  shared
+    k_cell_BL:   1.4e-3   # BL cell/access load (per row)           [ns]  per-tech
     t_SA0:       0.2      # base sense time                        [ns]
     t_restore:   0.8      # restore time (destructive read)        [ns]
     destructive: 0        # 1 => fold restore into t_SA (DRAM-like)
@@ -43,7 +56,6 @@ defaults:
     Nshare_min: 1
     Nshare_max: 32
     Nindep_max: 2.0e5
-    tcyc_max:   100
     BW_max:     1.0e9
 
   # ---- optional: pin decision variables to a fixed value ----
@@ -142,6 +154,7 @@ configs:
       t_restore: 6.0    # tRAS-tRCD write-back (AL-DRAM: tail 5% charge = ~42% of SA time)
       v_cell:    0.0154 # 60 F^2 (DESTINY sample_2D_eDRAM.cell) @ 16 nm
       v_sa0:     4.0
+      k_cell_BL: 3.0e-3 # storage cap loads the BL (C_BL ~ 3.5*C_cell, TL-DRAM) -> ~2x baseline
 
   sttmram_16nm:
     description: STT-MRAM 1T1R; non-destructive resistive read, current sensing
@@ -170,6 +183,22 @@ configs:
       t_SA0:  6.0       # NVSim-validated 7.72 ns (0.18 um); EMBER T_read ~5 ns (40 nm)
       t_sw:   0.05      # 1T1R access + bleed-path selector
       v_cell: 0.00307   # 12 F^2 (NVMExplorer 4-53 F^2, 1T1R access-limited) @ 16 nm
+      v_sa0:  20.0      # current sense + IV converter
+
+  reram_xpoint_16nm:
+    description: Crosspoint ReRAM (0T1R / 1D1R selector-accessed); ~4 F^2 -- far
+                 denser than the 1T1R reram_16nm, but IR-drop / sneak-path caps
+                 the subarray size and the 2-terminal selector costs switch time.
+    problem:
+      L: 2              # 4 F^2 cell is tiny; cells fill well under one layer
+    bounds:
+      NBL_max: 512      # IR-drop-limited crosspoint subarray (Lepri 2022: r*G product;
+      NWL_max: 512      #   N~64 already lossy at F=20 nm, G_LRS=50 uS -> cap array dim)
+    technology:
+      destructive: 0
+      t_SA0:  8.0       # crosspoint current sense + sneak-path settling (EMBER T_read~4*tau)
+      t_sw:   0.1       # 2-terminal selector nonlinearity (no access transistor)
+      v_cell: 0.001024  # 4 F^2 (NVSim cross-point 0T1R/1D1R; DESTINY sample_RRAM.cell) @ 16 nm
       v_sa0:  20.0      # current sense + IV converter
 
   pcram_16nm:

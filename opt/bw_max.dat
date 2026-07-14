@@ -10,8 +10,10 @@ param t_layer := 1.0;    # 1 um per tier
 
 # ---- technology / calibration (placeholder) ----
 param k_dec     := 0.02;
-param k_WL      := 0.0001;
-param k_BL      := 0.0003;
+param k_wire_WL := 1.1e-7;   # WL wire self-RC   (shared)
+param k_cell_WL := 4.0e-5;   # WL cell/gate load (per-tech)
+param k_wire_BL := 1.2e-6;   # BL wire self-RC   (shared)
+param k_cell_BL := 1.4e-3;   # BL cell/access load (per-tech)
 param t_SA0     := 0.2;
 param t_restore := 0.8;
 param destructive := 0;   # non-destructive read (sharing pays)
@@ -27,5 +29,4 @@ param NWL_min := 64;   param NWL_max := 4096;
 param margin_min := 0.2; param margin_max := 1.0;
 param Nshare_min := 1;   param Nshare_max := 32;
 param Nindep_max := 2e5;
-param tcyc_max := 100;
 param BW_max := 1e9;
