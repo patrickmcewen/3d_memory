@@ -23,7 +23,7 @@ sys.path.insert(0, str(OPT))
 
 from run_bw_max import (merge, apply_fixes, make_specs, make_solver,  # noqa: E402
                         DEFAULT_GUROBI, BUILD, SOLVED)
-from model import build_model, develop_coeffs                        # noqa: E402
+from model import build_model, develop_coeffs, energy_coeffs         # noqa: E402
 from pyomo.common.tempfiles import TempfileManager                  # noqa: E402
 
 @pytest.fixture(scope="module")
@@ -86,6 +86,38 @@ def test_charge_share_keeps_distributed_quadratic_and_caps_rows(cfg):
     m = build_model(_spec("edram_16nm", defaults, configs)[0], tech, bounds)
     assert m.N_WL.ub == pytest.approx(min(bounds.NWL_max, nwl_cap), rel=1e-9)
     assert m.N_WL.ub < bounds.NWL_max                            # actually binding
+
+
+# ---- energy_coeffs physics (no solver) ---------------------------------------
+
+def test_energy_bit_magnitudes(cfg):
+    """E_bit at a reference row-overfetch access tracks literature pJ/bit.
+
+    Evaluated at a fixed narrow-column subarray (activate 512 bitlines, read 8)
+    -- the commodity-access regime the O'Connor/NVMExplorer anchors are quoted
+    for. The BW-max solver drives b_acc->N_BL (wide access), which is strictly
+    MORE energy-efficient per bit, so these are upper references, not the optimum.
+    """
+    defaults, configs = cfg
+    def e_bit_pj(name, N_BL=512, N_WL=512, b_acc=8):
+        _, tech, _ = _spec(name, defaults, configs)
+        k_col, k_arr = energy_coeffs(tech)
+        e_access = (k_col * N_BL + k_arr * N_BL * N_WL + tech.e_periph
+                    + tech.write_fraction * tech.e_write_cell * b_acc)
+        return e_access / b_acc * 1e-3                       # fJ/bit -> pJ/bit
+    assert 1.0 < e_bit_pj("dram_100Mb") < 20.0               # O'Connor: FGDRAM ~2, GDDR5 14
+    assert 1.0 < e_bit_pj("edram_16nm") < 20.0
+    assert 0.1 < e_bit_pj("sram_16nm") < 20.0                # NVMExplorer SRAM read O(pJ) narrow access
+
+
+def test_charge_share_read_uses_full_rail_restore(cfg):
+    """A destructive charge-share read restores at the full rail, so its CV^2
+    swing is v_read^2 (not the partial v_read*v_sense develop signal)."""
+    defaults, configs = cfg
+    _, tech, _ = _spec("dram_100Mb", defaults, configs)
+    assert tech.destructive == 1
+    k_col, _ = energy_coeffs(tech)
+    assert k_col == pytest.approx(tech.c_cell * tech.v_read**2, rel=1e-9)
 
 
 # ---- end-to-end golden solves ------------------------------------------------

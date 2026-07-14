@@ -14,10 +14,14 @@ defaults:
 
   # ---- problem inputs (given) ----
   problem:
-    C:       100.0e9      # target capacity                 [bit]  (~800 Gbit)
+    C:       800.0e9      # target capacity                 [bit]  (~800 Gbit)
     A:       800.0e6    # footprint (area per layer)      [um^2]
     L:       8          # layer budget                    [layers]
     t_layer: 1.0        # physical thickness per layer    [um]
+    # Cooling power-density budget. 1 W/mm^2 == 1 uW/um^2 (the model's unit),
+    # so P_max is numerically identical in both. Presets: 0.4 air / 1.1 liquid
+    # (default) / 2.0 microfluidic (docs/ENERGY_MODEL_SPEC.md).
+    P_max:   1000000000.1        # power-density ceiling           [W/mm^2 == uW/um^2]
 
   # ---- technology / calibration coefficients ----
   # TODO(calibration): placeholders until a memory_model fit replaces them.
@@ -40,7 +44,7 @@ defaults:
     v_cell:      0.02     # volume per stored bit                   [um^3/bit]
     v_sa0:       4.0      # sense-amp volume (constant per amp)     [um^3]
     k_vdec:      0.004    # decoder volume per array cell           [um^3/cell]
-    v_sel:       0.2      # selector volume per (share x SA)        [um^3]
+    v_sel:       0.2      # selector vol per (EXTRA shared array x SA) [um^3] (0 at N_share=1)
     # Fixed periphery per PHYSICAL array (row decoder + WL drivers + array
     # edge/guard band), independent of array size. Without it a 1-row array is
     # "free", so the optimizer shrinks N_WL->1 to dodge BL settling; this term
@@ -57,6 +61,19 @@ defaults:
     v_ratio:     0.4      # V_BL,CELL/V_READ divider(voltage mode)  [-]
     c_cell:      25.0     # storage cap per cell    (charge-share)  [fF]  per-tech
     margin_sa:   0.1      # min charge-share signal C_cell/(C_cell+C_BL) (charge-share) [-]
+    # ---- energy / power-density model (opt/model.py::energy_coeffs) ----
+    # Read energy = (c_cell + c_bl*N_WL)*V_read^2*N_BL + e_periph, amortized over
+    # b_acc bits. V_read is the CV^2 swing (full rail for latch/resistive reads
+    # and destructive-restore charge reads; partial v_read*v_sense only for a
+    # non-destructive charge read). Write energy adds e_write_cell per written
+    # bit (NVM Joule set/reset); leakage is p_leak_bit per stored bit (DRAM
+    # refresh, SRAM gate leak).
+    v_read:         1.0     # read/precharge supply swing            [V]  per-tech
+    v_sense:        0.1     # developed charge-share signal          [V]  (charge-share only)
+    e_periph:       50.0    # fixed decode/WL-drive energy/access    [fJ/access]
+    e_write_cell:   0.0     # per-cell write energy beyond CV^2      [fJ/bit]  per-tech (NVM)
+    p_leak_bit:     1.0e-6  # leakage/refresh power per stored bit   [uW/bit]  per-tech
+    write_fraction: 0.0     # fraction of accesses that are writes   [-]  (0 = read-BW study)
 
   # ---- variable bounds ----
   bounds:
@@ -65,7 +82,7 @@ defaults:
     NWL_min:    1
     NWL_max:    1000000
     Nshare_min: 1
-    Nshare_max: 32
+    Nshare_max: 100
     Nindep_max: 2.0e5
     BW_max:     1.0e9
 

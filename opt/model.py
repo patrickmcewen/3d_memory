@@ -28,6 +28,7 @@ class ProblemSpec:
     A: float          # footprint (area per layer)     [um^2]
     L: int            # layer budget                   [layers]
     t_layer: float    # physical thickness per layer   [um]
+    P_max: float      # cooling power-density budget    [uW/um^2 == W/mm^2]
 
     def __post_init__(self):
         assert self.C > 0, f"C must be > 0, got {self.C}"
@@ -35,6 +36,7 @@ class ProblemSpec:
         assert self.L > 0 and float(self.L).is_integer(), f"L must be a positive integer, got {self.L}"
         self.L = int(self.L)
         assert self.t_layer > 0, f"t_layer must be > 0, got {self.t_layer}"
+        assert self.P_max > 0, f"P_max must be > 0, got {self.P_max}"
 
     @property
     def vol_budget(self) -> float:
@@ -61,7 +63,7 @@ class TechSpec:
     v_cell: float      # volume per stored bit                       [um^3/bit]
     v_sa0: float       # sense-amp volume (constant per amp)         [um^3]
     k_vdec: float      # decoder volume per array cell               [um^3/cell]
-    v_sel: float       # selector volume per (share x sense-amp)     [um^3]
+    v_sel: float       # selector volume per (extra shared array x sense-amp) [um^3]
     v_periph: float    # fixed peripheral overhead per array         [um^3/array]
     # ---- sense-settling model (Upton 2024 App. A/B) ----
     sense_mode: str    # 'current' (App. A) | 'voltage' (App. B) | 'charge_share' (DRAM)
@@ -74,6 +76,13 @@ class TechSpec:
     v_ratio: float     # V_BL,CELL / V_READ divider  (voltage mode)  [-]
     c_cell: float      # storage cap per cell  (charge-share mode)   [fF]
     margin_sa: float   # min charge-share signal fraction (chg mode) [-]
+    # ---- energy / power-density model (see energy_coeffs) ----
+    v_read: float      # read/precharge supply swing  (CV^2)         [V]
+    v_sense: float     # developed sense signal (charge-share only)  [V]
+    e_periph: float    # fixed decode/WL-drive energy per access     [fJ/access]
+    e_write_cell: float # per-cell write energy beyond CV^2 (NVM/DRAM) [fJ/bit]
+    p_leak_bit: float  # leakage/refresh power per stored bit         [uW/bit]
+    write_fraction: float # fraction of accesses that are writes      [-]
 
     def __post_init__(self):
         assert self.k_dec > 0, f"k_dec must be > 0, got {self.k_dec}"
@@ -98,6 +107,12 @@ class TechSpec:
         assert self.v_ratio > 0, f"v_ratio must be > 0, got {self.v_ratio}"
         assert self.c_cell > 0, f"c_cell must be > 0, got {self.c_cell}"
         assert 0 < self.margin_sa < 1, f"margin_sa must be in (0,1), got {self.margin_sa}"
+        assert self.v_read > 0, f"v_read must be > 0, got {self.v_read}"
+        assert self.v_sense > 0, f"v_sense must be > 0, got {self.v_sense}"
+        assert self.e_periph >= 0, f"e_periph must be >= 0, got {self.e_periph}"
+        assert self.e_write_cell >= 0, f"e_write_cell must be >= 0, got {self.e_write_cell}"
+        assert self.p_leak_bit >= 0, f"p_leak_bit must be >= 0, got {self.p_leak_bit}"
+        assert 0 <= self.write_fraction <= 1, f"write_fraction must be in [0,1], got {self.write_fraction}"
 
 
 @dataclass
@@ -182,6 +197,38 @@ def develop_coeffs(tech: TechSpec):
     return f_margin, a_lin, a_quad
 
 
+def energy_coeffs(tech: TechSpec):
+    """Per-access dynamic-energy coefficients (DESTINY SubArray::CalculatePower).
+
+    Returns ``(k_col, k_arr)`` for the bitline/BLSA read energy
+
+        E_read_access = k_col * N_BL + k_arr * (N_BL * N_WL)          [fJ]
+
+    from the uniform CV^2 form ``E = (c_cell + c_bl*N_WL) * V^2 * N_BL``, where
+    the ``c_bl*N_WL`` term is the whole activated row's distributed bitline cap
+    (grows with rows) and ``c_cell`` is the per-bitline cell/access cap. Unit
+    system: cap [fF] * V^2 -> fF*V^2 = 1 fJ.
+
+    ``V^2`` per sense mode:
+      * voltage / current: full precharge swing ``v_read^2`` (SRAM full-swing
+        latch; resistive-read bitline precharge).                  [DESTINY:687/714]
+      * charge_share: a DESTRUCTIVE read restores the row at the full rail, so
+        it dissipates ``v_read^2`` (write-back dominates DRAM/eDRAM); a hypothetical
+        non-destructive charge read develops only the partial signal
+        ``v_read*v_sense`` (senseVoltage*vdd).                      [DESTINY:699/702]
+
+    Peripheral (decode/WL) energy, per-cell write energy, and leakage are flat
+    per-tech params consumed directly in :func:`build_model`.
+    """
+    if tech.sense_mode == "charge_share" and not tech.destructive:
+        v2 = tech.v_read * tech.v_sense                  # partial-swing charge develop
+    else:
+        v2 = tech.v_read * tech.v_read                   # full-rail swing (or destructive restore)
+    k_col = tech.c_cell * v2                             # per active bitline (cell/access cap) [fJ]
+    k_arr = tech.c_bl * v2                               # distributed BL cap over the row       [fJ/cell]
+    return k_col, k_arr
+
+
 def build_model(problem: ProblemSpec, tech: TechSpec, bounds: Bounds) -> pyo.ConcreteModel:
     """Assemble the BW-max MINLP as a Pyomo ConcreteModel.
 
@@ -237,14 +284,14 @@ def build_model(problem: ProblemSpec, tech: TechSpec, bounds: Bounds) -> pyo.Con
     m.N_SA = pyo.Var(bounds=(0, b.Nindep_max * b.NBL_max))
     m.total_cells = pyo.Var(bounds=(0, b.NBL_max * b.NWL_max * b.Nindep_max * b.Nshare_max))
     m.cells_x_indep = pyo.Var(bounds=(0, b.NBL_max * b.NWL_max * b.Nindep_max))
-    m.sel_term = pyo.Var(bounds=(0, b.Nshare_max * b.Nindep_max * b.NBL_max))
+    m.sel_term = pyo.Var(bounds=(0, (b.Nshare_max - 1) * b.Nindep_max * b.NBL_max))
 
     m.def_cells_arr = pyo.Constraint(expr=m.cells_arr == m.N_BL * m.N_WL)
     m.def_Ntot = pyo.Constraint(expr=m.N_tot == m.N_indep * m.N_share)
     m.def_NSA = pyo.Constraint(expr=m.N_SA == m.N_indep * m.b_acc)          # = N_indep * bits/access
     m.def_total_cells = pyo.Constraint(expr=m.total_cells == m.cells_arr * m.N_tot)
     m.def_cells_x_indep = pyo.Constraint(expr=m.cells_x_indep == m.cells_arr * m.N_indep)
-    m.def_sel_term = pyo.Constraint(expr=m.sel_term == m.N_share * m.N_SA)
+    m.def_sel_term = pyo.Constraint(expr=m.sel_term == (m.N_share - 1) * m.N_SA)  # selectors only for sharing beyond the first array (0 at N_share=1)
 
     # ---- kernel constraints ------------------------------------------------
     m.cyc_dec = pyo.Constraint(expr=m.t_cycle >= m.t_dec)                    # decode floor
@@ -253,14 +300,36 @@ def build_model(problem: ProblemSpec, tech: TechSpec, bounds: Bounds) -> pyo.Con
     m.bw_def = pyo.Constraint(expr=m.BW * m.t_cycle == m.N_SA)               # BW = N_SA / t_cycle
     m.width_cap = pyo.Constraint(expr=m.b_acc <= m.N_BL)                     # cannot sense more bits than bitlines
     m.capacity = pyo.Constraint(expr=m.total_cells >= problem.C)             # meet target capacity
-    m.volume = pyo.Constraint(                                              # 3D volume packing budget
-        expr=tech.v_cell * m.total_cells
-        + tech.v_sa0 * m.N_SA                                               # SA volume: constant per amp
-        + tech.k_vdec * m.cells_x_indep
-        + tech.v_sel * m.sel_term
-        + tech.v_periph * m.N_tot                                          # fixed periphery per array (row dec/WL drivers/edge)
-        <= problem.vol_budget
-    )
+    vol_used = (tech.v_cell * m.total_cells                                 # shared by volume + power-density
+                + tech.v_sa0 * m.N_SA                                       # SA volume: constant per amp
+                + tech.k_vdec * m.cells_x_indep
+                + tech.v_sel * m.sel_term
+                + tech.v_periph * m.N_tot)                                  # fixed periphery per array (row dec/WL drivers/edge)
+    m.volume = pyo.Constraint(expr=vol_used <= problem.vol_budget)          # 3D volume packing budget
+
+    # ---- energy / power-density (see energy_coeffs) ------------------------
+    # E_access is the blended per-array-access energy: the CV^2 row activation
+    # (dominant, geometry-coupled) plus fixed periphery, plus the write-only
+    # per-cell term weighted by the write fraction. E_bit amortizes it over the
+    # b_acc bits actually delivered (O'Connor row-overfetch: a whole N_BL row
+    # swings, only b_acc bits leave). P_dyn = BW * E_bit is the total dynamic
+    # power; leakage is flat per stored bit. The power density
+    # (P_dyn + P_leak)/A_used stays <= P_max, written division-free by moving
+    # A_used = vol_used/(L*t_layer) to the RHS -- reusing the volume polynomial.
+    k_col, k_arr = energy_coeffs(tech)
+    f_w = tech.write_fraction
+    m.E_access = pyo.Expression(
+        expr=k_col * m.N_BL + k_arr * m.cells_arr + tech.e_periph
+        + f_w * tech.e_write_cell * m.b_acc)                                # [fJ] per single-array access
+    E_bit_ub = (k_col * b.NBL_max + k_arr * b.NBL_max * nwl_hi + tech.e_periph
+                + f_w * tech.e_write_cell * b.NBL_max)                       # b_acc >= 1 => E_bit <= E_access_max
+    m.E_bit = pyo.Var(bounds=(0, E_bit_ub))                                  # [fJ/bit]
+    m.P_dyn = pyo.Var(bounds=(0, problem.P_max * problem.A))                 # [uW]; <= P_max * footprint
+    m.def_E_bit = pyo.Constraint(expr=m.E_bit * m.b_acc == m.E_access)      # E_bit = E_access / b_acc
+    m.def_P_dyn = pyo.Constraint(expr=m.P_dyn == m.BW * m.E_bit)            # dynamic power [uW] (BW in bit/ns, E in fJ)
+    m.power_density = pyo.Constraint(
+        expr=m.P_dyn + tech.p_leak_bit * m.total_cells
+        <= (problem.P_max / (problem.L * problem.t_layer)) * vol_used)
 
     # ---- objective ---------------------------------------------------------
     m.bandwidth = pyo.Objective(expr=m.BW, sense=pyo.maximize)
