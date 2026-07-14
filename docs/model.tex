@@ -93,7 +93,7 @@ $\tdec,\twl,\tbl,\tsa$ & decode, wordline, bitline-develop, and sense (incl.\ re
 $\tsw$             & selector switching time for time-muxing shared arrays \\
 $\Volarr,\Volsa,\Voldec,\Volsel$ & volumes of one array, sense amp, decoder, selector network \\
 $\Larr,\Lper$      & layers holding bits vs.\ layers holding periphery \\
-$\Asa$             & footprint of one sense amp (offset-limited) \\
+$\Asa$             & footprint of one sense amp (constant) \\
 $K$                & column-multiplexing degree \\
 $w_{\mathrm{SA}},\,p_{\mathrm{BL}}$ & sense-amp pitch, bitline pitch \\
 $u$                & areal utilization of a peripheral tier \\
@@ -164,24 +164,37 @@ the sharing degree and is what makes sharing cost area, not just time.
 \subsection{Scaling laws}
 \begin{align}
   \twl &= k^{\mathrm{wire}}_{WL}\,\Nbl^2 + k^{\mathrm{cell}}_{WL}\,\Nbl, &
-  \tbl &= k^{\mathrm{wire}}_{BL}\,\Nwl^2 + k^{\mathrm{cell}}_{BL}\,\Nwl, \\
+  \tbl &= f_\Delta\,\bigl(a_{\mathrm{lin}}\,\Nwl + a_{\mathrm{quad}}\,\Nwl^2\bigr), \\
   \Voldec &\propto \Nwl\cdot\Nbl \propto \Volarr, &
-  \Volsa  &\propto \frac{1}{\mathrm{margin}^2}.
+  \Volsa  &= \text{const}.
   \label{eq:scaling}
 \end{align}
-Each develop time separates into a \emph{wire} self-RC term and a \emph{cell}
-loading term. The wire term is the distributed-line delay $\tfrac12 r c L^2$
-(the CACTI-6 $n(n{+}1)rc/2$ form) with $L$ set by the number of cells along the
-line, hence quadratic; its coefficient $k^{\mathrm{wire}}=\tfrac12 rc$ is fixed
-by the BEOL metal stack and node ($\times$ tier count in monolithic 3D) and is
-therefore \emph{shared} across cell technologies on the same wire stack. The
-cell term is the storage/access-device capacitance charged through the access
-resistance, roughly linear in the cells on the line, and is the knob set
-\emph{per technology} ($k^{\mathrm{cell}}$: DRAM storage cap, gain-cell read-FET
-gate cap, memristor device cap, \dots). Together they are what makes large
-unsegmented arrays expensive. Decoder volume tracks the array it drives;
-sense-amp volume follows the Pelgrom offset law $\Asa\propto 1/\mathrm{margin}^2$,
-so tighter sensing margins cost quadratic area.
+The wordline develop $\twl$ keeps the wire/cell split: a distributed-line
+self-RC term $\tfrac12 rc L^2$ (CACTI-6 $n(n{+}1)rc/2$ form, quadratic in the
+$\Nbl$ cells along the line; coefficient $k^{\mathrm{wire}}_{WL}=\tfrac12 rc$
+set by the BEOL stack, \emph{shared} across cell technologies) plus a linear
+gate-loading term $k^{\mathrm{cell}}_{WL}$ (\emph{per technology}).
+
+The bitline develop $\tbl$ is now the \textbf{sense-signal settling time},
+derived per sensing mode from Upton (2024) (current-based readout,
+App.~A; steady-state voltage sensing, App.~B). Both modes reduce to one
+polynomial in the $\Nwl$ cells on the bitline: a linear \emph{signal-development}
+term plus the shared quadratic BL wire self-RC $a_{\mathrm{quad}}=\tfrac12
+r_{BL}c_{BL}$, all scaled by a settling factor $f_\Delta$ that carries the
+sensing margin as a \emph{time} cost. For current sensing the development time
+constant is $\tau_C = C_{BL}\,nU_t/I_{\mathrm{read}}$ (Eq.~A.12), giving
+$a_{\mathrm{lin}}=c_{BL}\,nU_t/I_{\mathrm{read}}$ and $f_\Delta=-\ln(1-\Delta)$;
+for voltage sensing the Elmore constant $\tau=\tfrac{V_{BL}}{V_{\mathrm{read}}}
+(R_{\text{pull-up}}+R_{BL}/2)C_{BL}$ (Eq.~B.7) gives a pull-up-dominated
+$a_{\mathrm{lin}}=v_{\mathrm{ratio}}R_{\text{pull-up}}c_{BL}$ and, from the
+synchronous bound $T_{\mathrm{clk}}\ge-2\tau\ln(1-\Delta)$ (Eq.~B.8),
+$f_\Delta=-2\ln(1-\Delta)$. The settling fraction $\Delta$ (e.g.\ $0.99$) is a
+fixed reliability requirement, not a free variable; tightening it (Eq.~B.8)
+costs time logarithmically. $\tsa$ retains the intrinsic device read/latch floor
+(and restore, for destructive cells). Decoder volume tracks the array it drives;
+sense-amp volume is a fixed footprint per amp --- the earlier Pelgrom area law
+$\Asa\propto1/\mathrm{margin}^2$ is dropped, because the accurate cost of a
+sensing margin is the settling \emph{time} above, not sense-amp area.
 
 \section{Derived structure}
 \label{sec:derived}
@@ -192,7 +205,7 @@ periphery:
 \begin{align}
   \Larr  &= \left\lceil \frac{C\,\acell}{A} \right\rceil, &
   \Lper  &= L - \Larr, &
-  \Nsa   &\le \frac{A\,\Lper\,u}{\Asa(\mathrm{margin})}.
+  \Nsa   &\le \frac{A\,\Lper\,u}{\Asa}.
   \label{eq:layers}
 \end{align}
 Bandwidth lives in $\Lper$. Hence \textbf{cell density is a quantified indirect

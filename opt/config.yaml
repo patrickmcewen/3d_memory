@@ -1,49 +1,55 @@
 # 3d_memory :: optimization configs for the phase-1 BW-max MINLP.
 #
-# `defaults` holds every parameter the model (opt/bw_max.mod) needs. Each entry
+# `defaults` holds every parameter the model (opt/model.py) needs. Each entry
 # under `configs` is deep-merged onto `defaults` (per sub-block), so a config
 # only needs to list what it changes. Select one with
 #   python opt/run_bw_max.py --config <name>
 # or run them all with --all.  List names with --list.
 #
 # Units: time [ns], length [um], area [um^2], volume [um^3], capacity [bit].
+# Sense model (technology.*): cap [fF/cell], resistance [ohm/cell or ohm],
+# current [uA], voltage [V] -- see opt/model.py::develop_coeffs.
 
 defaults:
 
   # ---- problem inputs (given) ----
   problem:
-    C:       1.0e9      # target capacity                 [bit]  (800 Gbit)
-    A:       800.0e6      # footprint (area per layer)      [um^2] (1 mm^2)
-    L:       8          # layer budget                    [layers]  (baseline default; named configs override per capacity/cell-size)
+    C:       1.0e9      # target capacity                 [bit]  (~1 Gbit)
+    A:       800.0e6    # footprint (area per layer)      [um^2]
+    L:       8          # layer budget                    [layers]
     t_layer: 1.0        # physical thickness per layer    [um]
 
   # ---- technology / calibration coefficients ----
   # TODO(calibration): placeholders until a memory_model fit replaces them.
   technology:
     k_dec:       0.02     # decoder delay per address bit          [ns]
-    # WL/BL develop = distributed WIRE self-RC (quadratic, shared) + CELL/access
-    # loading (linear, per-technology):
-    #   t_WL = k_wire_WL*N_BL^2 + k_cell_WL*N_BL     (WL spans N_BL columns)
-    #   t_BL = k_wire_BL*N_WL^2 + k_cell_BL*N_WL     (BL loaded by N_WL rows)
-    # k_wire_* = 1/2 * r_wire * c_wire : set by the BEOL metal stack + node
-    #   (x tier count in monolithic 3D). SHAREABLE across cell technologies that
-    #   sit on the same wire stack -> keep in defaults, override only per node/3D.
-    # k_cell_* = per-cell load (storage/gate/junction cap driven through the
-    #   access/driver R), ~ number of cells on the line. SET PER TECHNOLOGY.
-    #   Baseline below is a gain-cell-ish placeholder; configs override for their cell.
-    # Calibrated so a nominal 512-cell line gives t_WL~0.05 ns, t_BL~1 ns.
+    # WL develop = distributed WIRE self-RC (quadratic) + CELL/gate load (linear):
+    #   t_WL = k_wire_WL*N_BL^2 + k_cell_WL*N_BL   (WL spans N_BL columns)
+    # k_wire_WL = 1/2*r*c set by the BEOL metal stack + node (shared across cell
+    # techs on one wire stack); k_cell_WL = per-cell gate load (per-technology).
     k_wire_WL:   1.1e-7   # WL wire self-RC     (per column^2)      [ns]  shared
     k_cell_WL:   4.0e-5   # WL cell/gate load   (per column)        [ns]  per-tech
-    k_wire_BL:   1.2e-6   # BL wire self-RC     (per row^2)         [ns]  shared
-    k_cell_BL:   1.4e-3   # BL cell/access load (per row)           [ns]  per-tech
-    t_SA0:       0.2      # base sense time                        [ns]
-    t_restore:   0.8      # restore time (destructive read)        [ns]
+    # BL develop is now the sense-signal SETTLING model (Upton 2024 App. A/B),
+    # derived in opt/model.py::develop_coeffs from the physical params below:
+    #   t_BL = f_margin(Delta,mode) * (a_lin*N_WL + a_quad*N_WL^2)
+    # a_quad = 1/2*r_bl*c_bl (shared BL wire self-RC); a_lin per sense mode.
+    t_SA0:       0.2      # intrinsic device read/latch floor       [ns]  per-tech
+    t_restore:   0.8      # restore time (destructive read)         [ns]
     destructive: 0        # 1 => fold restore into t_SA (DRAM-like)
-    t_sw:        0.03     # selector switching time                [ns]
-    v_cell:      0.02     # volume per stored bit                  [um^3/bit]
-    v_sa0:       4.0      # sense-amp base volume at margin = 1    [um^3]
-    k_vdec:      0.004    # decoder volume per array cell          [um^3/cell]
-    v_sel:       0.2      # selector volume per (share x SA)       [um^3]
+    t_sw:        0.03     # selector switching time                 [ns]
+    v_cell:      0.02     # volume per stored bit                   [um^3/bit]
+    v_sa0:       4.0      # sense-amp volume (constant per amp)     [um^3]
+    k_vdec:      0.004    # decoder volume per array cell           [um^3/cell]
+    v_sel:       0.2      # selector volume per (share x SA)        [um^3]
+    # ---- sense-settling model (Upton 2024 App. A/B) ----
+    sense_mode:  voltage  # 'current' (App. A) | 'voltage' (App. B)
+    settle_frac: 0.99     # Delta: fraction of steady state to settle to
+    c_bl:        0.2      # BL parasitic cap per cell               [fF/cell]  shared
+    r_bl:        12.0     # BL wire resistance per cell pitch       [ohm/cell] shared
+    i_read:      5.0      # read current            (current mode)  [uA]  per-tech
+    n_ut:        0.04     # subthreshold n*Ut       (current mode)  [V]
+    r_pullup:    20000.0  # pull-up resistance      (voltage mode)  [ohm] per-tech
+    v_ratio:     0.4      # V_BL,CELL/V_READ divider(voltage mode)  [-]
 
   # ---- variable bounds ----
   bounds:
@@ -51,16 +57,14 @@ defaults:
     NBL_max:    1000000
     NWL_min:    1
     NWL_max:    1000000
-    margin_min: 0.2
-    margin_max: 0.2
     Nshare_min: 1
     Nshare_max: 32
     Nindep_max: 2.0e5
     BW_max:     1.0e9
 
   # ---- optional: pin decision variables to a fixed value ----
-  # Any of margin / N_BL / N_WL / N_share listed here is fixed by collapsing
-  # its [min,max] bounds onto the given value (leave empty to optimize freely).
+  # Any of N_BL / N_WL / N_share listed here is fixed by collapsing its
+  # [min,max] bounds onto the given value (leave empty to optimize freely).
   fix: {}
 
   # ---- solver knobs ----
@@ -72,12 +76,13 @@ defaults:
 configs:
 
   gaincell_100Mb:
-    description: Non-destructive gain-cell macro; sharing pays (baseline).
+    description: Non-destructive gain-cell macro; read-FET voltage sense (baseline).
     # inherits all defaults
 
   dram_100Mb:
-    description: Destructive DRAM-like cell; restore folded into t_SA, so the
-                 t_SA+t_sw floor is high and sharing buys little.
+    description: Destructive DRAM-like cell; restore folded into t_SA (write-back),
+                 so the t_SA floor is high and sharing buys little. Charge-share
+                 voltage sense.
     technology:
       destructive: 1
       t_SA0:     0.25
@@ -85,137 +90,132 @@ configs:
       v_cell:    0.012    # denser bitcell
 
   nvm_100Mb:
-    description: Non-destructive NVM; slow sense, larger sense-amp footprint.
+    description: Non-destructive resistive NVM; current sensing, slower read.
     technology:
+      sense_mode: current
       t_SA0:  0.6
+      i_read: 3.0         # weaker read current -> slower settle
       v_sa0:  9.0
       v_cell: 0.03
 
-  gaincell_fixed_margin:
-    description: Baseline gain cell but with the sensing margin pinned at 0.5
-                 (shows the SA-volume / bandwidth cost of a fixed margin).
-    fix:
-      margin: 0.5
+  gaincell_tight_settle:
+    description: Baseline gain cell but settling to 99.9% (tighter read margin);
+                 shows the develop-time cost of a stricter settling fraction.
+    technology:
+      settle_frac: 0.999
 
   gaincell_big_footprint:
     description: Baseline gain cell on a 2x larger footprint (more volume for
                  peripheral bandwidth at the same capacity).
     problem:
-      A: 2.0e6
+      A: 1.6e9
 
   # =====================================================================
-  # Literature-calibrated technology points (added 2026-07-13).
+  # Literature-calibrated technology points (added 2026-07-13; migrated to
+  # the sense-settling model 2026-07-14).
   #
-  # Cell areas are taken as feature-normalized cell sizes (F^2) from cited
-  # sources and scaled to a COMMON 16 nm node so the technologies are
-  # directly comparable at one process:
+  # Cell areas are feature-normalized cell sizes (F^2) from cited sources
+  # scaled to a COMMON 16 nm node:
   #     v_cell [um^3/bit] = cellArea_F2 * (16e-3 um)^2 * t_layer(=1 um)
   #                       = cellArea_F2 * 2.56e-4
-  # (This is exactly how DESTINY/NVSim carry cell area: F^2 x featureSize^2.)
-  #
-  # Read/sense times (t_SA0) are representative validated-silicon numbers at
-  # the cited nodes, so treat them as order-of-magnitude, not exact-at-16nm.
-  # destructive=1 only for charge-based reads that must write back (DRAM/eDRAM).
-  # v_sa0 is bumped for CURRENT-sensing cells (STT/SOT/RRAM), which carry an
-  # IV converter -- DESTINY constant.h:50 IV_CONVERTER_AREA = 50000 F^2
-  # (~12.8 um^2 at 16 nm, amortized over the mux group).
-  #
-  # Layer budget L per config uses a "cells occupy <= 50% of the 3D volume"
-  # rule (L = ceil(2 * C * v_cell / (A * t_layer))), leaving the other half
-  # of the stack for bandwidth periphery. C = 100 Mbit, A = 1 mm^2 fixed.
+  # t_SA0 is the intrinsic device read/latch floor (representative validated-
+  # silicon read times at the cited nodes -- order-of-magnitude, not exact-at-
+  # 16nm). destructive=1 only for charge reads that write back (DRAM/eDRAM).
+  # sense_mode: voltage for latch/charge-share/transistor reads; current for
+  # resistive reads (STT/SOT/RRAM/PCM), which also carry an IV converter, so
+  # v_sa0 is bumped (DESTINY constant.h:50 IV_CONVERTER_AREA=50000 F^2 ~12.8 um^2).
   #
   # Sources:
   #   NVMExplorer  = Pentecost et al., HPCA 2022, Table I (F^2, read/write ns)
   #   NVSim        = Dong et al., TCAD 2012, validation Tables IV/V/VII/VIII
   #   DESTINY      = Mittal et al., JLPEA 2017 (cells in config/*.cell; SA model)
   #   EMBER        = Upton et al., ESSCIRC 2023 (RRAM 1T1R read)
+  #   Upton 2024   = sensing settling-time appendices (current App. A, voltage App. B)
   # =====================================================================
 
   sram_16nm:
-    description: 6T SRAM, non-destructive fast latch sense. Area-hungry (146 F^2)
-                 so 100 Mb needs a tall stack; little volume left for extra SAs.
-    problem:
-      L: 8              # 146 F^2 is bulky: cells fill ~7.5 layers of the budget
+    description: 6T SRAM, non-destructive fast latch sense (voltage). Area-hungry
+                 (146 F^2) so 100 Mb needs a tall stack.
     technology:
-      destructive: 0
+      sense_mode: voltage
       t_SA0:  0.5       # NVMExplorer read 0.5-1.5 ns (7-16 nm)
       v_cell: 0.0374    # 146 F^2 (NVMExplorer / DESTINY sample_SRAM.cell) @ 16 nm
       v_sa0:  4.0       # voltage latch sense-amp (no IV converter)
 
   edram_16nm:
-    description: 1T1C embedded DRAM; destructive charge-share read -> write-back
-                 restore folded into the cycle, so the t_SA floor is high and
-                 sharing buys little BW (the DRAM-style regime, now sourced).
+    description: 1T1C embedded DRAM; destructive charge-share read (voltage) ->
+                 write-back restore folded into the cycle.
     problem:
       L: 4              # 60 F^2 cell fills ~3 layers
     technology:
+      sense_mode: voltage
       destructive: 1
       t_SA0:     1.5    # charge-share sense; NVSim DRAM tRCD ~15 ns (90 nm), scaled
-      t_restore: 6.0    # tRAS-tRCD write-back (AL-DRAM: tail 5% charge = ~42% of SA time)
+      t_restore: 6.0    # tRAS-tRCD write-back
       v_cell:    0.0154 # 60 F^2 (DESTINY sample_2D_eDRAM.cell) @ 16 nm
       v_sa0:     4.0
-      k_cell_BL: 3.0e-3 # storage cap loads the BL (C_BL ~ 3.5*C_cell, TL-DRAM) -> ~2x baseline
+      r_pullup:  40000.0 # storage cap loads the BL -> slower settle (~2x)
 
   sttmram_16nm:
-    description: STT-MRAM 1T1R; non-destructive resistive read, current sensing
-                 (larger SA). Writes are slow (~20 ns) but this model scores the
-                 READ-supply BW; write BW would be gated by that pulse.
+    description: STT-MRAM 1T1R; non-destructive resistive read, current sensing.
     technology:
-      destructive: 0
+      sense_mode: current
       t_SA0:  5.0       # NVMExplorer read 1.3-19 ns; DESTINY-validated 4.83 ns (45 nm)
+      i_read: 4.0       # TMR read current
       v_cell: 0.00512   # 20 F^2 (NVMExplorer 14-75 F^2, low end) @ 16 nm
-      v_sa0:  20.0      # current sense + IV converter (DESTINY IV_CONVERTER_AREA=50000 F^2)
+      v_sa0:  20.0      # current sense + IV converter
 
   sotmram_16nm:
-    description: SOT-MRAM 3-terminal; decoupled read/write path -> fast, low-current
-                 write and non-destructive read. Larger cell than STT (extra write line).
+    description: SOT-MRAM 3-terminal; decoupled fast read (current sense),
+                 non-destructive.
     technology:
-      destructive: 0
+      sense_mode: current
       t_SA0:  4.0       # NVMExplorer read 1.4-11 ns; DESTINY-validated 3.8 ns (SLC)
+      i_read: 5.0
       v_cell: 0.00512   # 20 F^2 (NVMExplorer single point) @ 16 nm
       v_sa0:  20.0      # current sense + IV converter
 
   reram_16nm:
     description: ReRAM 1T1R; non-destructive resistive read, current sensing.
-                 Selector adds a little switching time.
     technology:
-      destructive: 0
-      t_SA0:  6.0       # NVSim-validated 7.72 ns (0.18 um); EMBER T_read ~5 ns (40 nm)
+      sense_mode: current
+      t_SA0:  0.3       # latch floor; read time is settling-dominated (EMBER ~5 ns)
+      i_read: 3.0       # 1T1R access-limited read current
       t_sw:   0.05      # 1T1R access + bleed-path selector
       v_cell: 0.00307   # 12 F^2 (NVMExplorer 4-53 F^2, 1T1R access-limited) @ 16 nm
       v_sa0:  20.0      # current sense + IV converter
 
   reram_xpoint_16nm:
-    description: Crosspoint ReRAM (0T1R / 1D1R selector-accessed); ~4 F^2 -- far
-                 denser than the 1T1R reram_16nm, but IR-drop / sneak-path caps
-                 the subarray size and the 2-terminal selector costs switch time.
+    description: Crosspoint ReRAM (0T1R / 1D1R); ~4 F^2, but IR-drop / sneak-path
+                 caps the subarray size, so current-sense settling dominates.
     problem:
       L: 2              # 4 F^2 cell is tiny; cells fill well under one layer
     bounds:
-      NBL_max: 512      # IR-drop-limited crosspoint subarray (Lepri 2022: r*G product;
-      NWL_max: 512      #   N~64 already lossy at F=20 nm, G_LRS=50 uS -> cap array dim)
+      NBL_max: 512      # IR-drop-limited crosspoint subarray (Lepri 2022)
+      NWL_max: 512
     technology:
-      destructive: 0
-      t_SA0:  8.0       # crosspoint current sense + sneak-path settling (EMBER T_read~4*tau)
+      sense_mode: current
+      t_SA0:  0.3       # latch floor; sneak-path settling carries the read time
+      i_read: 2.0       # weak crosspoint read current (sneak paths)
       t_sw:   0.1       # 2-terminal selector nonlinearity (no access transistor)
-      v_cell: 0.001024  # 4 F^2 (NVSim cross-point 0T1R/1D1R; DESTINY sample_RRAM.cell) @ 16 nm
+      v_cell: 0.001024  # 4 F^2 (NVSim cross-point 0T1R/1D1R) @ 16 nm
       v_sa0:  20.0      # current sense + IV converter
 
   pcram_16nm:
-    description: PCM 1T1R; non-destructive read but slow sense, voltage mode.
-                 SET/RESET pulses (~40/150 ns, DESTINY sample_PCRAM.cell) make
-                 write BW far lower than the read BW scored here.
+    description: PCM 1T1R; non-destructive read but slow, voltage-mode sense
+                 (high cell resistance -> weak divider signal -> slow settle).
     technology:
-      destructive: 0
-      t_SA0:  20.0      # NVMExplorer read 1-100 ns (NVSim-validated 65.9 ns @ 0.12 um)
+      sense_mode: voltage
+      t_SA0:  2.0       # intrinsic sense floor; NVSim-validated 65.9 ns @ 0.12 um total
+      r_pullup: 160000.0 # high pull-up for high-R cell -> slow settle
       v_cell: 0.0064    # 25 F^2 (NVMExplorer 25-40 F^2, low end) @ 16 nm
       v_sa0:  8.0       # voltage sense, larger write drivers
 
   fefet_16nm:
-    description: FeFET; transistor-based, non-destructive read (unlike capacitor
-                 FeRAM). Fast read, very low write energy.
+    description: FeFET; transistor-based non-destructive read (voltage sense).
+                 Fast read, very low write energy.
     technology:
-      destructive: 0
-      t_SA0:  3.0       # FeRAM read ~14 ns (NVMExplorer); FeFET read faster (transistor sense)
+      sense_mode: voltage
+      t_SA0:  1.0       # FeRAM read ~14 ns; FeFET read faster (transistor sense)
       v_cell: 0.00384   # 15 F^2 (NVMExplorer FeFET 4-103 F^2) @ 16 nm
       v_sa0:  4.0

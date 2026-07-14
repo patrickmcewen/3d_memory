@@ -1,5 +1,10 @@
 ### 3d_memory :: phase-1 bandwidth-maximization MINLP  (homogeneous macro)
 ###
+### FROZEN VALIDATION ORACLE. The live model is now the Pyomo port in
+### opt/model.py, driven by opt/run_bw_max.py. This AMPL file is retained only
+### so the port can be re-validated against it (objective + structural .nl
+### diff); it is no longer on the solve path. Do not add new physics here.
+###
 ### Maximize the internal array-supply bandwidth of a homogeneous monolithic-3D
 ### memory macro at fixed capacity C, footprint A, and layer budget L.
 ### Every constraint corresponds one-to-one to the converged kernel in

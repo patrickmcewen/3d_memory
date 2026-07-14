@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Run the 3d_memory phase-1 BW-max MINLP for a YAML-selected config.
 
-Reads opt/config.yaml, deep-merges a named config onto `defaults`, renders an
-AMPL data file, and solves opt/bw_max.mod with the bundled StreamHLS
-ampl+gurobi. Generated artifacts land in opt/build/ (gitignored).
+Reads opt/config.yaml, deep-merges a named config onto `defaults`, builds the
+Pyomo model in opt/model.py, and solves it with the bundled StreamHLS Gurobi
+ASL driver. Generated artifacts (.nl / .sol / solver log) land in opt/build/
+(gitignored).
 
 Examples:
     python opt/run_bw_max.py --list
@@ -13,39 +14,49 @@ Examples:
 import argparse
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 
 import yaml
+import pyomo.environ as pyo
+from pyomo.common.tempfiles import TempfileManager
+from pyomo.opt import TerminationCondition as TC
+
+from model import ProblemSpec, TechSpec, Bounds, build_model
 
 HERE = Path(__file__).resolve().parent          # .../3d_memory/opt
-MODEL = HERE / "bw_max.mod"
-REPORT = HERE / "report.run"
 BUILD = HERE / "build"
 
-# Default location of the bundled ampl+gurobi (override with --ampl or $AMPL_BIN).
-DEFAULT_AMPL = Path(
-    "/nfs/pool0/pmcewen/rsgvm13dir/codesign2/Stream-HLS/ampl.linux-intel64/ampl"
+# Default location of the bundled Gurobi 13 ASL driver. Its $ORIGIN rpath
+# resolves libgurobi130.so, so no LD_LIBRARY_PATH is needed. Override with
+# --gurobi or $GUROBI_ASL.
+DEFAULT_GUROBI = Path(
+    "/nfs/pool0/pmcewen/rsgvm13dir/codesign2/Stream-HLS/ampl.linux-intel64/gurobi"
 )
 
-# Every param the model declares, by block. Used to render the .dat and to
-# assert a config is complete (fail loud on a missing/extra key).
+# Every param the model declares, by block. Used to assert a config is complete
+# (fail loud on a missing/extra key) before constructing the dataclass specs.
 PARAMS = {
     "problem": ["C", "A", "L", "t_layer"],
-    "technology": ["k_dec", "k_wire_WL", "k_cell_WL", "k_wire_BL", "k_cell_BL",
-                   "t_SA0", "t_restore", "destructive", "t_sw", "v_cell",
-                   "v_sa0", "k_vdec", "v_sel"],
-    "bounds": ["NBL_min", "NBL_max", "NWL_min", "NWL_max", "margin_min",
-               "margin_max", "Nshare_min", "Nshare_max", "Nindep_max", "BW_max"],
+    "technology": ["k_dec", "k_wire_WL", "k_cell_WL", "t_SA0", "t_restore",
+                   "destructive", "t_sw", "v_cell", "v_sa0", "k_vdec", "v_sel",
+                   "sense_mode", "settle_frac", "c_bl", "r_bl", "i_read",
+                   "n_ut", "r_pullup", "v_ratio"],
+    "bounds": ["NBL_min", "NBL_max", "NWL_min", "NWL_max",
+               "Nshare_min", "Nshare_max", "Nindep_max", "BW_max"],
 }
+# Params that are NOT numeric (skip float() coercion in make_specs).
+STRING_PARAMS = {"sense_mode"}
 # fix-key -> (min_param, max_param) bound pair it collapses.
 FIXABLE = {
-    "margin":  ("margin_min", "margin_max"),
     "N_BL":    ("NBL_min", "NBL_max"),
     "N_WL":    ("NWL_min", "NWL_max"),
     "N_share": ("Nshare_min", "Nshare_max"),
 }
+
+# Terminations that may carry a usable (possibly non-proven-optimal) incumbent.
+SOLVED = {TC.optimal, TC.locallyOptimal, TC.feasible, TC.maxTimeLimit,
+          TC.maxIterations}
 
 
 def merge(defaults: dict, cfg: dict) -> dict:
@@ -66,98 +77,152 @@ def apply_fixes(merged: dict) -> None:
         merged["bounds"][lo] = merged["bounds"][hi] = val
 
 
-def fmt(v) -> str:
-    """AMPL-friendly literal: ints stay ints, floats keep full precision."""
-    return str(int(v)) if isinstance(v, int) or (isinstance(v, float) and v.is_integer() and abs(v) < 1e6) else repr(float(v))
+def make_specs(merged: dict):
+    """Turn a merged config dict into (ProblemSpec, TechSpec, Bounds).
 
-
-def render_dat(merged: dict) -> str:
-    lines = []
+    Assert each block holds exactly the params the model needs -- an extra or
+    missing key is a config bug, so fail loud rather than silently dropping it.
+    """
+    specs = {}
     for block, keys in PARAMS.items():
-        have = merged[block]
-        missing = [k for k in keys if k not in have]
-        assert not missing, f"config block '{block}' is missing params: {missing}"
-        lines.append(f"# {block}")
-        for k in keys:
-            lines.append(f"param {k} := {fmt(have[k])};")
-        lines.append("")
-    return "\n".join(lines)
+        # PyYAML reads unsigned-exponent literals like "1.0e9" as strings; every
+        # numeric param is coerced to float (dataclasses re-narrow the integer
+        # ones L/Nshare_* in __post_init__). String params (sense_mode) pass through.
+        have = {k: (v if k in STRING_PARAMS else float(v))
+                for k, v in merged[block].items()}
+        assert set(have) == set(keys), (
+            f"config block '{block}' key mismatch: "
+            f"missing={sorted(set(keys) - set(have))}, extra={sorted(set(have) - set(keys))}"
+        )
+        specs[block] = have
+    return (ProblemSpec(**specs["problem"]),
+            TechSpec(**specs["technology"]),
+            Bounds(**specs["bounds"]))
 
 
-def render_run(dat_path: Path, solver: dict) -> str:
-    opts = " ".join(f"{k}={v}" for k, v in solver.items())
-    return "\n".join([
-        "option solver gurobi;",
-        f"option gurobi_options '{opts}';",
-        f"model {MODEL};",
-        f"data {dat_path};",
-        "solve;",
-        f"commands {REPORT};",
-        "",
-    ])
+def make_solver(merged: dict, gurobi_asl: Path):
+    """Build the ASL/Gurobi solver interface with the config's solver knobs."""
+    opt = pyo.SolverFactory("asl", executable=str(gurobi_asl))
+    opt.options["solver"] = "gurobi"        # names the driver's option namespace
+    for k, v in (merged["solver"] or {}).items():
+        opt.options[k] = v
+    return opt
 
 
-REPORT_KEYS = {
-    "BW":       r"objective\s+BW\s*=\s*([-\d.eE+]+)\s*B/s",
-    "t_cycle":  r"cycle time t_cycle\s*=\s*([-\d.eE+]+)",
-    "N_BL":     r"N_BL x N_WL\s*=\s*([-\d.eE+]+)\s*x",
-    "N_WL":     r"N_BL x N_WL\s*=\s*[-\d.eE+]+\s*x\s*([-\d.eE+]+)",
-    "b_acc":    r"sense width b_acc\s*=\s*([-\d.eE+]+)",
-    "margin":   r"margin\s*=\s*([-\d.eE+]+)",
-    "N_share":  r"sharing  N_share\s*=\s*([-\d.eE+]+)",
-    "N_indep":  r"indep sets N_indep\s*=\s*([-\d.eE+]+)",
-    "vol_pct":  r"volume used / budget.*\(([-\d.eE+]+)%\)",
-}
+# Fields lifted straight out of the solved model (Var or Expression); pyo.value
+# works on both. Keep this list == report layout below.
+VALUE_KEYS = ["N_BL", "N_WL", "b_acc", "N_share", "N_indep",
+              "t_cycle", "BW", "t_dec", "t_WL", "t_BL", "t_SA", "sum_dev",
+              "cells_arr", "N_tot", "N_SA", "total_cells", "cells_x_indep",
+              "sel_term"]
 
 
-def parse_report(text: str) -> dict:
-    out = {}
-    for key, pat in REPORT_KEYS.items():
-        m = re.search(pat, text)
-        out[key] = float(m.group(1)) if m else None
-    return out
+def collect_values(m, problem: ProblemSpec, tech: TechSpec) -> dict:
+    """Dict of solved values plus derived report quantities."""
+    d = {k: pyo.value(getattr(m, k)) for k in VALUE_KEYS}
+    vol_used = (tech.v_cell * d["total_cells"] + tech.v_sa0 * d["N_SA"]
+                + tech.k_vdec * d["cells_x_indep"] + tech.v_sel * d["sel_term"])
+    d["vol_arrays"] = tech.v_cell * d["total_cells"]
+    d["vol_sas"] = tech.v_sa0 * d["N_SA"]
+    d["vol_dec"] = tech.k_vdec * d["cells_x_indep"]
+    d["vol_sel"] = tech.v_sel * d["sel_term"]
+    d["vol_used"] = vol_used
+    d["vol_budget"] = problem.vol_budget
+    d["vol_pct"] = 100 * vol_used / problem.vol_budget
+    d["C"] = problem.C
+    d["t_sw"] = tech.t_sw
+    d["sense_mode"] = tech.sense_mode
+    return d
 
 
-def solve_config(name: str, defaults: dict, configs: dict, ampl: Path) -> dict:
+def print_report(name: str, v: dict) -> None:
+    """Design-point report -- mirrors the old report.run layout.
+
+    BW is solved in bit/ns; 1 bit/ns = 1.25e8 B/s.
+    """
+    print("\n================= 3d_memory :: BW-max design point =================")
+    print(f"  objective  BW        = {v['BW'] * 1.25e8:12.4g}  B/s   ({v['BW'] * 0.125e-3:.4g} TB/s)")
+    print(f"  cycle time t_cycle    = {v['t_cycle']:12.4g}  ns")
+    print("  ------------------------------------------------------------------")
+    print(f"  array   N_BL x N_WL   = {v['N_BL']:8.1f} x {v['N_WL']:<8.1f}  (K = N_BL/b_acc = {v['N_BL'] / v['b_acc']:.2f})")
+    print(f"  sense width b_acc     = {v['b_acc']:12.1f}  bit")
+    print(f"  sense mode            = {v['sense_mode']:>12}")
+    print(f"  sharing  N_share      = {v['N_share']:12.0f}")
+    print(f"  indep sets N_indep    = {v['N_indep']:12.1f}")
+    print(f"  sense amps N_SA       = {v['N_SA']:12.4g}")
+    print("  ------------------------------------------------------------------")
+    print(f"  t_dec / t_WL / t_BL   = {v['t_dec']:.4g} / {v['t_WL']:.4g} / {v['t_BL']:.4g} ns")
+    print(f"  t_SA+t_sw (floor)     = {v['t_SA'] + v['t_sw']:.4g} ns   develop sum = {v['sum_dev']:.4g} ns")
+    print("  ------------------------------------------------------------------")
+    print(f"  volume used / budget  = {v['vol_used']:.4g} / {v['vol_budget']:.4g} um^3  ({v['vol_pct']:.1f}%)")
+    print(f"    arrays   = {v['vol_arrays']:.4g}   SAs = {v['vol_sas']:.4g}   dec = {v['vol_dec']:.4g}   sel = {v['vol_sel']:.4g} um^3")
+    print(f"  capacity  stored/target = {v['total_cells']:.4g} / {v['C']:.4g} bit")
+    print("====================================================================")
+
+
+def solve_config(name: str, defaults: dict, configs: dict, gurobi_asl: Path) -> dict:
+    """Build, solve, and report one config. Returns a summary-row dict."""
     assert name in configs, f"unknown config '{name}' (available: {list(configs)})"
     merged = merge(defaults, configs[name])
     apply_fixes(merged)
+    problem, tech, bounds = make_specs(merged)
 
-    BUILD.mkdir(exist_ok=True)
-    dat_path = BUILD / f"{name}.dat"
-    run_path = BUILD / f"{name}.run"
-    dat_path.write_text(render_dat(merged))
-    run_path.write_text(render_run(dat_path, merged["solver"]))
+    m = build_model(problem, tech, bounds)
 
     desc = configs[name].get("description", "").strip()
     print(f"\n########## config: {name} ##########")
     if desc:
         print(f"# {desc}")
 
-    proc = subprocess.run([str(ampl), str(run_path)], capture_output=True, text=True)
-    sys.stdout.write(proc.stdout)
-    if proc.stderr:
-        sys.stderr.write(proc.stderr)
-    (BUILD / f"{name}.log").write_text(proc.stdout + proc.stderr)
-    assert proc.returncode == 0, f"ampl exited {proc.returncode} for config '{name}'"
+    BUILD.mkdir(exist_ok=True)
+    TempfileManager.tempdir = str(BUILD)     # keep .nl/.sol/.opt under build/
+    opt = make_solver(merged, gurobi_asl)
+    logfile = BUILD / f"{name}.log"
+    results = opt.solve(m, load_solutions=False, tee=True, keepfiles=True,
+                        symbolic_solver_labels=True, logfile=str(logfile))
 
-    result = parse_report(proc.stdout)
-    result["config"] = name
-    return result
+    tc = results.solver.termination_condition
+    solved = tc in SOLVED and len(results.solution) > 0
+    row = {"config": name, "termination": str(tc)}
+    if not solved:
+        print(f"  [no incumbent: termination = {tc}]")
+        row.update({k: None for k in ("BW", "t_cycle", "N_BL", "N_WL",
+                                      "N_share", "vol_pct")})
+        return row
+
+    m.solutions.load_from(results)
+    v = collect_values(m, problem, tech)
+    print_report(name, v)
+    row.update({"BW": v["BW"] * 1.25e8, "t_cycle": v["t_cycle"],
+                "N_BL": v["N_BL"], "N_WL": v["N_WL"], "mode": v["sense_mode"],
+                "N_share": v["N_share"], "vol_pct": v["vol_pct"],
+                "gap": read_gap(logfile)})
+    return row
+
+
+def read_gap(logfile: Path):
+    """Best-known optimality gap from the Gurobi log, or None."""
+    if not logfile.exists():
+        return None
+    matches = re.findall(r"gap\s+([-\d.eE+]+)%", logfile.read_text())
+    return float(matches[-1]) if matches else None
 
 
 def print_summary(rows: list) -> None:
     if len(rows) < 2:
         return
-    hdr = f"{'config':<26}{'BW[B/s]':>13}{'t_cyc[ns]':>11}{'N_BLxN_WL':>16}{'margin':>8}{'N_sh':>6}{'vol%':>7}"
+    hdr = f"{'config':<26}{'BW[B/s]':>13}{'t_cyc[ns]':>11}{'N_BLxN_WL':>16}{'mode':>9}{'N_sh':>6}{'vol%':>7}"
     print("\n" + "=" * len(hdr))
     print("SUMMARY")
     print(hdr)
     print("-" * len(hdr))
     for r in rows:
-        geo = f"{r['N_BL']:.0f}x{r['N_WL']:.0f}" if r["N_BL"] else "-"
+        if r.get("BW") is None:
+            print(f"{r['config']:<26}{'(' + r['termination'] + ')':>60}")
+            continue
+        geo = f"{r['N_BL']:.0f}x{r['N_WL']:.0f}"
         print(f"{r['config']:<26}{r['BW']:>13.4g}{r['t_cycle']:>11.4g}{geo:>16}"
-              f"{r['margin']:>8.3g}{r['N_share']:>6.0f}{r['vol_pct']:>7.1f}")
+              f"{r['mode']:>9}{r['N_share']:>6.0f}{r['vol_pct']:>7.1f}")
     print("=" * len(hdr))
 
 
@@ -168,8 +233,8 @@ def main() -> int:
     ap.add_argument("--all", action="store_true", help="solve every config in the file")
     ap.add_argument("--list", action="store_true", help="list config names and exit")
     ap.add_argument("--config-file", type=Path, default=HERE / "config.yaml")
-    ap.add_argument("--ampl", type=Path,
-                    default=Path(os.environ.get("AMPL_BIN", DEFAULT_AMPL)))
+    ap.add_argument("--gurobi", type=Path,
+                    default=Path(os.environ.get("GUROBI_ASL", DEFAULT_GUROBI)))
     args = ap.parse_args()
 
     doc = yaml.safe_load(args.config_file.read_text())
@@ -180,7 +245,7 @@ def main() -> int:
             print(f"  {name:<26} {cfg.get('description', '').strip()}")
         return 0
 
-    assert args.ampl.exists(), f"ampl binary not found at {args.ampl} (set --ampl or $AMPL_BIN)"
+    assert args.gurobi.exists(), f"gurobi ASL driver not found at {args.gurobi} (set --gurobi or $GUROBI_ASL)"
 
     if args.all:
         names = list(configs)
@@ -189,7 +254,7 @@ def main() -> int:
     else:
         ap.error("give --config <name>, --all, or --list")
 
-    rows = [solve_config(n, defaults, configs, args.ampl) for n in names]
+    rows = [solve_config(n, defaults, configs, args.gurobi) for n in names]
     print_summary(rows)
     return 0
 

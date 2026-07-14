@@ -1,2 +1,9 @@
 # generated AMPL data/run/log artifacts
 build/
+
+# python venv
+.venv/
+
+# python caches
+__pycache__/
+*.pyc
