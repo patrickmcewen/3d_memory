@@ -1,0 +1,245 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+% ---- notation macros -------------------------------------------------------
+\newcommand{\Nindep}{N_{\mathrm{arr,indep}}}
+\newcommand{\Nshare}{N_{\mathrm{arr,share}}}
+\newcommand{\Ntot}{N_{\mathrm{arr,tot}}}
+\newcommand{\Nsa}{N_{\mathrm{SA}}}
+\newcommand{\Ndec}{N_{\mathrm{dec}}}
+\newcommand{\Nbl}{N_{\mathrm{BL,arr}}}
+\newcommand{\Nwl}{N_{\mathrm{WL,arr}}}
+\newcommand{\tcyc}{t_{\mathrm{cycle}}}
+\newcommand{\tdec}{t_{\mathrm{dec}}}
+\newcommand{\twl}{t_{\mathrm{WL}}}
+\newcommand{\tbl}{t_{\mathrm{BL}}}
+\newcommand{\tsa}{t_{\mathrm{SA}}}
+\newcommand{\tsw}{t_{\mathrm{switch}}}
+\newcommand{\Volarr}{\mathrm{Vol}_{\mathrm{arr}}}
+\newcommand{\Volsa}{\mathrm{Vol}_{\mathrm{SA}}}
+\newcommand{\Voldec}{\mathrm{Vol}_{\mathrm{dec}}}
+\newcommand{\Volsel}{\mathrm{Vol}_{\mathrm{sel}}}
+\newcommand{\bacc}{b_{\mathrm{acc}}}          % bits/access
+\newcommand{\Larr}{L_{\mathrm{arr}}}
+\newcommand{\Lper}{L_{\mathrm{periph}}}
+\newcommand{\Asa}{A_{\mathrm{SA}}}
+\newcommand{\acell}{a_{\mathrm{cell}}}
+
+\title{A Macro-Level Bandwidth Model for Monolithic 3D Memory}
+\author{3d\_memory \, --- design-space exploration tool}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We give the analytical kernel behind \texttt{3d\_memory}, a macro-level
+design-space-exploration tool for monolithic 3D memories at the
+CACTI/DESTINY/NVSim altitude. Given a fixed storage capacity $C$, a fixed
+footprint $A$, a fixed layer budget $L$, and a peak-temperature constraint
+$\Delta T_{\max}$, the tool searches 3D organizations that
+\emph{maximize the internal array-supply bandwidth}. The central object is a
+throughput-bound cycle time, a bandwidth identity linear in the number of
+independent peripheral sets, and a volume-packing constraint that ties
+capacity, cell density, and the layer partition together. Routing, PDN, and the
+thermal boundary condition are deferred (Sec.~\ref{sec:scope}).
+\end{abstract}
+
+\section{Problem statement}
+\label{sec:problem}
+
+\begin{quote}
+\emph{Given} a fixed capacity $C$, a fixed footprint $A$, a fixed number of
+monolithic tiers $L$, and a peak-temperature budget $\Delta T_{\max}$;
+\emph{find} the 3D memory organization (array geometry, degree of peripheral
+sharing, sense-amp stacking, and tier assignment of circuit classes) that
+\emph{maximizes} the internal array-supply bandwidth $\mathrm{BW}$.
+\end{quote}
+
+Two named 3D levers act on this objective:
+\begin{enumerate}[nosep]
+  \item \textbf{Peripheral stacking} --- tucking sense amps, decoders, and
+        selectors on tiers under/over the array (CUA / Choi-style), freeing
+        footprint and relieving pitch.
+  \item \textbf{Multi-tier bitcells} --- placing different devices of a single
+        cell on different tiers, raising areal cell density.
+\end{enumerate}
+
+\section{Nomenclature}
+\label{sec:notation}
+
+\begin{center}
+\begin{tabular}{@{}l p{0.70\textwidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+$C,\;A,\;L$        & storage capacity, footprint (area/layer), layer budget \\
+$\Delta T_{\max}$  & peak temperature rise allowed (thermal governor) \\
+$\acell$           & areal footprint of one stored bit (cell density$^{-1}$) \\
+$\Nindep$          & number of \emph{independent} peripheral sets (arrays or blocks of shared arrays) \\
+$\Nshare$          & number of arrays time-multiplexed onto one shared peripheral set \\
+$\Ntot$            & total array count, $\Ntot=\Nindep\cdot\Nshare$ \\
+$\Nsa,\;\Ndec$     & number of sense amps, number of decoders \\
+$\bacc$            & bits delivered per access (sense width) \\
+$\Nbl,\;\Nwl$      & bitlines, wordlines per array \\
+$\tcyc$            & steady-state cycle time (throughput bound) \\
+$\tdec,\twl,\tbl,\tsa$ & decode, wordline, bitline-develop, and sense (incl.\ restore) times \\
+$\tsw$             & selector switching time for time-muxing shared arrays \\
+$\Volarr,\Volsa,\Voldec,\Volsel$ & volumes of one array, sense amp, decoder, selector network \\
+$\Larr,\Lper$      & layers holding bits vs.\ layers holding periphery \\
+$\Asa$             & footprint of one sense amp (offset-limited) \\
+$K$                & column-multiplexing degree \\
+$w_{\mathrm{SA}},\,p_{\mathrm{BL}}$ & sense-amp pitch, bitline pitch \\
+$u$                & areal utilization of a peripheral tier \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{The kernel}
+\label{sec:kernel}
+
+\subsection{Cycle time (throughput bound)}
+The steady-state cycle time is set by the slowest \emph{un-hideable} resource
+occupancy. The shared decoder and sense-amp occupancies are floors that cannot
+be pipelined away; the array develop latency $\twl+\tbl$ can be hidden by
+interleaving $\Nshare$ arrays onto the shared periphery:
+\begin{equation}
+  \tcyc = \max\!\left(\;
+    \tdec,\;\;
+    \tsa+\tsw,\;\;
+    \frac{\tdec+\twl+\tbl+\tsa+\tsw}{\Nshare}
+  \;\right).
+  \label{eq:tcyc}
+\end{equation}
+$\tdec$ is the critical decoder-stage delay; $\tsa$ \emph{includes restore} for
+destructive-read cells. This last inclusion silently encodes the technology
+dependence of sharing: for a destructive cell (DRAM) $\tsa$ floors near $t_{RC}$
+and the shared term can never dominate, so interleaving buys nothing; for a
+non-destructive cell (gain cell, NVM) $\tsa$ is small and interleaving pays.
+
+\subsection{Bandwidth}
+Internal array-supply bandwidth is the per-access word width divided by the
+cycle time, replicated across every \emph{independent} peripheral set:
+\begin{equation}
+  \boxed{\;\mathrm{BW} = \frac{\bacc}{\tcyc}\,\Nindep\;}
+  \qquad\text{with}\qquad
+  \bacc \le \Nbl .
+  \label{eq:bw}
+\end{equation}
+The cap $\bacc\le\Nbl$ states that no access can sense more bits than there are
+bitlines (whole-row-activate limit). Sharing raises $\Ntot$ and hides latency
+but never appears in \eqref{eq:bw}: it adds capacity, not bandwidth.
+
+\subsection{Accounting identities}
+\begin{align}
+  \Ntot &= \Nindep\cdot\Nshare, &
+  \Nsa  &= \Nindep\cdot\bacc, &
+  \Ndec &= \Nindep .
+  \label{eq:counts}
+\end{align}
+There is one decoder per independent set, and the sense-amp count is the total
+delivered word width.
+
+\subsection{Volume (packing identity)}
+Consumed volume equals the sum of every packed component --- an equality, not a
+bound, so that no volume goes unaccounted:
+\begin{equation}
+  \mathrm{Vol} \;=\;
+    \Volarr\cdot\Ntot \;+\;
+    \Volsa\cdot\Nsa   \;+\;
+    \Voldec\cdot\Ndec \;+\;
+    \Volsel(\Nshare).
+  \label{eq:vol}
+\end{equation}
+The selector term $\Volsel(\Nshare)$ is the volume of the network that
+time-multiplexes $\Nshare$ arrays onto one shared peripheral set; it grows with
+the sharing degree and is what makes sharing cost area, not just time.
+
+\subsection{Scaling laws}
+\begin{align}
+  \Voldec &\propto \Nwl\cdot\Nbl \propto \Volarr, &
+  \Volsa  &\propto \frac{1}{\mathrm{margin}^2}.
+  \label{eq:scaling}
+\end{align}
+Decoder volume tracks the array it drives; sense-amp volume follows the Pelgrom
+offset law $\Asa\propto 1/\mathrm{margin}^2$, so tighter sensing margins cost
+quadratic area.
+
+\section{Derived structure}
+\label{sec:derived}
+
+\subsection{Layer partition}
+Capacity and footprint fix how many tiers must hold bits; the rest are free for
+periphery:
+\begin{align}
+  \Larr  &= \left\lceil \frac{C\,\acell}{A} \right\rceil, &
+  \Lper  &= L - \Larr, &
+  \Nsa   &\le \frac{A\,\Lper\,u}{\Asa(\mathrm{margin})}.
+  \label{eq:layers}
+\end{align}
+Bandwidth lives in $\Lper$. Hence \textbf{cell density is a quantified indirect
+bandwidth lever}: shrinking $\acell$ (e.g.\ by making the cell 3D / multi-tier)
+lowers $\Larr$ and frees peripheral tiers for more sense amps --- worthwhile iff
+the freed tiers buy more $\Nsa$ than the added cell complexity costs in $\Volarr$.
+
+\subsection{Optimal sharing degree}
+Interleaving helps only until the develop term in \eqref{eq:tcyc} drops to the
+floor; beyond that, more sharing adds $\Volsel$ and $\Ntot$ for no bandwidth:
+\begin{equation}
+  \Nshare^\star =
+  \left\lceil
+    \frac{\tdec+\twl+\tbl+\tsa+\tsw}{\max(\tdec,\;\tsa+\tsw)}
+  \right\rceil .
+  \label{eq:nshare}
+\end{equation}
+
+\subsection{Width / mux / pitch coupling}
+The sense width is set by the column-mux degree, which is floored by the
+sense-amp pitch; stacking $n$ sense-amp tiers relieves that pitch:
+\begin{equation}
+  \bacc = \frac{\Nbl}{K},
+  \qquad
+  K \ge \left\lceil \frac{w_{\mathrm{SA}}}{p_{\mathrm{BL}}} \right\rceil \Big/\, n .
+  \label{eq:width}
+\end{equation}
+So the width lever, the mux degree, the sense-amp pitch, and sense-amp tier
+stacking are a single coupled knob.
+
+\section{Allocation recipe}
+\label{sec:recipe}
+Given $(C,A,L,\text{cell/tier tech})$, the optimizer walks the levers in
+dependency order:
+\begin{enumerate}[nosep]
+  \item \textbf{Cell density} --- fixes $\Larr$ via \eqref{eq:layers}, freeing $\Lper$.
+  \item \textbf{Array geometry} --- fixes the $\tcyc$ floor \eqref{eq:tcyc} and $\Volarr,\Asa$.
+  \item \textbf{Sense-amp stacking + mux degree} --- raises $\bacc$ toward $\Nbl$ \eqref{eq:width}.
+  \item \textbf{Share to $\Nshare^\star$} --- reaches the $\tcyc$ floor at minimum cost \eqref{eq:nshare}.
+  \item \textbf{Fill $\Lper$} --- spend remaining peripheral area on $\Nsa$ \eqref{eq:layers}, maximizing \eqref{eq:bw}.
+\end{enumerate}
+
+\section{Scope and deferrals}
+\label{sec:scope}
+Phase 1 is a \emph{packing} model: how much bandwidth-producing hardware fits in
+$L$ tiers of area $A$ at capacity $C$. Two assumptions justify deferring routing:
+(i) \textbf{distributed vertical bottom-exit} --- each independent array exits
+its bits through a local per-array vertical port grid, so there is no die-scale
+horizontal data-collection network; and (ii) \textbf{consumer-provisioned} --- we
+model that the bandwidth exists at the exit surface, not who consumes it. Under
+these, data egress collapses to a short local vertical hop (roughly uniform
+across banking choices), so the packing result is close to physical rather than a
+loose upper bound. The internal selector cost is retained ($\tsw$, $\Volsel$).
+
+\medskip\noindent
+\textbf{Deferred:} the thermal boundary condition (a pluggable stub returns
+$P_{\max}$ from an areal $R_{\mathrm{th}}$; the concurrency cap
+$\Nsa^{\mathrm{active}} \le \Delta T_{\max}/(R_{\mathrm{stack}}\,E_{\mathrm{access}}/\tcyc)$
+then caps simultaneously-firing sense amps), the power-delivery network, and the
+lateral address/command distribution (narrow, assumed provisioned).
+
+\end{document}

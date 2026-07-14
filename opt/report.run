@@ -1,0 +1,28 @@
+# 3d_memory :: design-point report (AMPL commands, run after solve).
+# Included via `commands opt/report.run;` from bw_max.run or the Python driver.
+
+printf "\n================= 3d_memory :: BW-max design point =================\n";
+# BW is solved in bit/ns; 1 bit/ns = 1.25e8 B/s.
+printf "  objective  BW        = %12.4g  B/s   (%.4g TB/s)\n", BW*1.25e8, BW*0.125e-3;
+printf "  cycle time t_cycle    = %12.4g  ns\n", t_cycle;
+printf "  ------------------------------------------------------------------\n";
+printf "  array   N_BL x N_WL   = %8.1f x %-8.1f  (K = N_BL/b_acc = %.2f)\n",
+       N_BL, N_WL, N_BL/b_acc;
+printf "  sense width b_acc     = %12.1f  bit\n", b_acc;
+printf "  margin                = %12.4g\n", margin;
+printf "  sharing  N_share      = %12d\n", N_share;
+printf "  indep sets N_indep    = %12.1f\n", N_indep;
+printf "  sense amps N_SA       = %12.4g\n", N_SA;
+printf "  ------------------------------------------------------------------\n";
+printf "  t_dec / t_WL / t_BL   = %.4g / %.4g / %.4g ns\n", t_dec, t_WL, t_BL;
+printf "  t_SA+t_sw (floor)     = %.4g ns   develop sum = %.4g ns\n",
+       t_SA + t_sw, sum_dev;
+printf "  ------------------------------------------------------------------\n";
+printf "  volume used / budget  = %.4g / %.4g um^3  (%.1f%%)\n",
+       v_cell*total_cells + v_sa0*vsa_term + k_vdec*cells_x_indep + v_sel*sel_term,
+       VolBudget,
+       100*(v_cell*total_cells + v_sa0*vsa_term + k_vdec*cells_x_indep + v_sel*sel_term)/VolBudget;
+printf "    arrays   = %.4g   SAs = %.4g   dec = %.4g   sel = %.4g um^3\n",
+       v_cell*total_cells, v_sa0*vsa_term, k_vdec*cells_x_indep, v_sel*sel_term;
+printf "  capacity  stored/target = %.4g / %.4g bit\n", total_cells, C;
+printf "====================================================================\n";

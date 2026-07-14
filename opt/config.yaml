@@ -1,0 +1,192 @@
+# 3d_memory :: optimization configs for the phase-1 BW-max MINLP.
+#
+# `defaults` holds every parameter the model (opt/bw_max.mod) needs. Each entry
+# under `configs` is deep-merged onto `defaults` (per sub-block), so a config
+# only needs to list what it changes. Select one with
+#   python opt/run_bw_max.py --config <name>
+# or run them all with --all.  List names with --list.
+#
+# Units: time [ns], length [um], area [um^2], volume [um^3], capacity [bit].
+
+defaults:
+
+  # ---- problem inputs (given) ----
+  problem:
+    C:       1.0e8      # target capacity                 [bit]  (100 Mbit)
+    A:       1.0e6      # footprint (area per layer)      [um^2] (1 mm^2)
+    L:       8          # layer budget                    [layers]  (baseline default; named configs override per capacity/cell-size)
+    t_layer: 1.0        # physical thickness per layer    [um]
+
+  # ---- technology / calibration coefficients ----
+  # TODO(calibration): placeholders until a memory_model fit replaces them.
+  technology:
+    k_dec:       0.02     # decoder delay per address bit          [ns]
+    k_WL:        0.0001   # wordline-develop coeff (per column)    [ns]
+    k_BL:        0.0003   # bitline-develop coeff (per row)        [ns]
+    t_SA0:       0.2      # base sense time                        [ns]
+    t_restore:   0.8      # restore time (destructive read)        [ns]
+    destructive: 0        # 1 => fold restore into t_SA (DRAM-like)
+    t_sw:        0.03     # selector switching time                [ns]
+    v_cell:      0.02     # volume per stored bit                  [um^3/bit]
+    v_sa0:       4.0      # sense-amp base volume at margin = 1    [um^3]
+    k_vdec:      0.004    # decoder volume per array cell          [um^3/cell]
+    v_sel:       0.2      # selector volume per (share x SA)       [um^3]
+
+  # ---- variable bounds ----
+  bounds:
+    NBL_min:    1
+    NBL_max:    1000000
+    NWL_min:    1
+    NWL_max:    1000000
+    margin_min: 0.2
+    margin_max: 0.2
+    Nshare_min: 1
+    Nshare_max: 32
+    Nindep_max: 2.0e5
+    tcyc_max:   100
+    BW_max:     1.0e9
+
+  # ---- optional: pin decision variables to a fixed value ----
+  # Any of margin / N_BL / N_WL / N_share listed here is fixed by collapsing
+  # its [min,max] bounds onto the given value (leave empty to optimize freely).
+  fix: {}
+
+  # ---- solver knobs ----
+  solver:
+    nonconvex: 2
+    timelim:   300
+    outlev:    1
+
+configs:
+
+  gaincell_100Mb:
+    description: Non-destructive gain-cell macro; sharing pays (baseline).
+    # inherits all defaults
+
+  dram_100Mb:
+    description: Destructive DRAM-like cell; restore folded into t_SA, so the
+                 t_SA+t_sw floor is high and sharing buys little.
+    technology:
+      destructive: 1
+      t_SA0:     0.25
+      t_restore: 1.2
+      v_cell:    0.012    # denser bitcell
+
+  nvm_100Mb:
+    description: Non-destructive NVM; slow sense, larger sense-amp footprint.
+    technology:
+      t_SA0:  0.6
+      v_sa0:  9.0
+      v_cell: 0.03
+
+  gaincell_fixed_margin:
+    description: Baseline gain cell but with the sensing margin pinned at 0.5
+                 (shows the SA-volume / bandwidth cost of a fixed margin).
+    fix:
+      margin: 0.5
+
+  gaincell_big_footprint:
+    description: Baseline gain cell on a 2x larger footprint (more volume for
+                 peripheral bandwidth at the same capacity).
+    problem:
+      A: 2.0e6
+
+  # =====================================================================
+  # Literature-calibrated technology points (added 2026-07-13).
+  #
+  # Cell areas are taken as feature-normalized cell sizes (F^2) from cited
+  # sources and scaled to a COMMON 16 nm node so the technologies are
+  # directly comparable at one process:
+  #     v_cell [um^3/bit] = cellArea_F2 * (16e-3 um)^2 * t_layer(=1 um)
+  #                       = cellArea_F2 * 2.56e-4
+  # (This is exactly how DESTINY/NVSim carry cell area: F^2 x featureSize^2.)
+  #
+  # Read/sense times (t_SA0) are representative validated-silicon numbers at
+  # the cited nodes, so treat them as order-of-magnitude, not exact-at-16nm.
+  # destructive=1 only for charge-based reads that must write back (DRAM/eDRAM).
+  # v_sa0 is bumped for CURRENT-sensing cells (STT/SOT/RRAM), which carry an
+  # IV converter -- DESTINY constant.h:50 IV_CONVERTER_AREA = 50000 F^2
+  # (~12.8 um^2 at 16 nm, amortized over the mux group).
+  #
+  # Layer budget L per config uses a "cells occupy <= 50% of the 3D volume"
+  # rule (L = ceil(2 * C * v_cell / (A * t_layer))), leaving the other half
+  # of the stack for bandwidth periphery. C = 100 Mbit, A = 1 mm^2 fixed.
+  #
+  # Sources:
+  #   NVMExplorer  = Pentecost et al., HPCA 2022, Table I (F^2, read/write ns)
+  #   NVSim        = Dong et al., TCAD 2012, validation Tables IV/V/VII/VIII
+  #   DESTINY      = Mittal et al., JLPEA 2017 (cells in config/*.cell; SA model)
+  #   EMBER        = Upton et al., ESSCIRC 2023 (RRAM 1T1R read)
+  # =====================================================================
+
+  sram_16nm:
+    description: 6T SRAM, non-destructive fast latch sense. Area-hungry (146 F^2)
+                 so 100 Mb needs a tall stack; little volume left for extra SAs.
+    problem:
+      L: 8              # 146 F^2 is bulky: cells fill ~7.5 layers of the budget
+    technology:
+      destructive: 0
+      t_SA0:  0.5       # NVMExplorer read 0.5-1.5 ns (7-16 nm)
+      v_cell: 0.0374    # 146 F^2 (NVMExplorer / DESTINY sample_SRAM.cell) @ 16 nm
+      v_sa0:  4.0       # voltage latch sense-amp (no IV converter)
+
+  edram_16nm:
+    description: 1T1C embedded DRAM; destructive charge-share read -> write-back
+                 restore folded into the cycle, so the t_SA floor is high and
+                 sharing buys little BW (the DRAM-style regime, now sourced).
+    problem:
+      L: 4              # 60 F^2 cell fills ~3 layers
+    technology:
+      destructive: 1
+      t_SA0:     1.5    # charge-share sense; NVSim DRAM tRCD ~15 ns (90 nm), scaled
+      t_restore: 6.0    # tRAS-tRCD write-back (AL-DRAM: tail 5% charge = ~42% of SA time)
+      v_cell:    0.0154 # 60 F^2 (DESTINY sample_2D_eDRAM.cell) @ 16 nm
+      v_sa0:     4.0
+
+  sttmram_16nm:
+    description: STT-MRAM 1T1R; non-destructive resistive read, current sensing
+                 (larger SA). Writes are slow (~20 ns) but this model scores the
+                 READ-supply BW; write BW would be gated by that pulse.
+    technology:
+      destructive: 0
+      t_SA0:  5.0       # NVMExplorer read 1.3-19 ns; DESTINY-validated 4.83 ns (45 nm)
+      v_cell: 0.00512   # 20 F^2 (NVMExplorer 14-75 F^2, low end) @ 16 nm
+      v_sa0:  20.0      # current sense + IV converter (DESTINY IV_CONVERTER_AREA=50000 F^2)
+
+  sotmram_16nm:
+    description: SOT-MRAM 3-terminal; decoupled read/write path -> fast, low-current
+                 write and non-destructive read. Larger cell than STT (extra write line).
+    technology:
+      destructive: 0
+      t_SA0:  4.0       # NVMExplorer read 1.4-11 ns; DESTINY-validated 3.8 ns (SLC)
+      v_cell: 0.00512   # 20 F^2 (NVMExplorer single point) @ 16 nm
+      v_sa0:  20.0      # current sense + IV converter
+
+  reram_16nm:
+    description: ReRAM 1T1R; non-destructive resistive read, current sensing.
+                 Selector adds a little switching time.
+    technology:
+      destructive: 0
+      t_SA0:  6.0       # NVSim-validated 7.72 ns (0.18 um); EMBER T_read ~5 ns (40 nm)
+      t_sw:   0.05      # 1T1R access + bleed-path selector
+      v_cell: 0.00307   # 12 F^2 (NVMExplorer 4-53 F^2, 1T1R access-limited) @ 16 nm
+      v_sa0:  20.0      # current sense + IV converter
+
+  pcram_16nm:
+    description: PCM 1T1R; non-destructive read but slow sense, voltage mode.
+                 SET/RESET pulses (~40/150 ns, DESTINY sample_PCRAM.cell) make
+                 write BW far lower than the read BW scored here.
+    technology:
+      destructive: 0
+      t_SA0:  20.0      # NVMExplorer read 1-100 ns (NVSim-validated 65.9 ns @ 0.12 um)
+      v_cell: 0.0064    # 25 F^2 (NVMExplorer 25-40 F^2, low end) @ 16 nm
+      v_sa0:  8.0       # voltage sense, larger write drivers
+
+  fefet_16nm:
+    description: FeFET; transistor-based, non-destructive read (unlike capacitor
+                 FeRAM). Fast read, very low write energy.
+    technology:
+      destructive: 0
+      t_SA0:  3.0       # FeRAM read ~14 ns (NVMExplorer); FeFET read faster (transistor sense)
+      v_cell: 0.00384   # 15 F^2 (NVMExplorer FeFET 4-103 F^2) @ 16 nm
+      v_sa0:  4.0

@@ -1,0 +1,14 @@
+# 3d_memory :: solve the phase-1 bandwidth-maximization MINLP (static example).
+# Usage (bundled StreamHLS ampl+gurobi, run from the 3d_memory/ directory):
+#   <ampl> opt/bw_max.run
+# For YAML-driven configs use opt/run_bw_max.py instead.
+
+option solver gurobi;
+option gurobi_options 'nonconvex=2 timelim=300 outlev=1';
+
+model opt/bw_max.mod;
+data  opt/bw_max.dat;
+
+solve;
+
+commands opt/report.run;

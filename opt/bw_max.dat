@@ -1,0 +1,31 @@
+# 3d_memory :: example instance + placeholder calibration
+# TODO(calibration): every technology coefficient below is a stand-in until the
+# memory_model characterization fit is wired in.
+
+# ---- problem inputs (given) ----
+param C       := 1e8;    # 100 Mbit
+param A       := 1e6;    # 1 mm^2 footprint per layer
+param L       := 8;      # 8 monolithic tiers
+param t_layer := 1.0;    # 1 um per tier
+
+# ---- technology / calibration (placeholder) ----
+param k_dec     := 0.02;
+param k_WL      := 0.0001;
+param k_BL      := 0.0003;
+param t_SA0     := 0.2;
+param t_restore := 0.8;
+param destructive := 0;   # non-destructive read (sharing pays)
+param t_sw      := 0.03;
+param v_cell    := 0.02;
+param v_sa0     := 4.0;
+param k_vdec    := 0.004;
+param v_sel     := 0.2;
+
+# ---- bounds ----
+param NBL_min := 64;   param NBL_max := 4096;
+param NWL_min := 64;   param NWL_max := 4096;
+param margin_min := 0.2; param margin_max := 1.0;
+param Nshare_min := 1;   param Nshare_max := 32;
+param Nindep_max := 2e5;
+param tcyc_max := 100;
+param BW_max := 1e9;
