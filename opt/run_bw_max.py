@@ -40,8 +40,8 @@ PARAMS = {
     "problem": ["C", "A", "L", "t_layer"],
     "technology": ["k_dec", "k_wire_WL", "k_cell_WL", "t_SA0", "t_restore",
                    "destructive", "t_sw", "v_cell", "v_sa0", "k_vdec", "v_sel",
-                   "sense_mode", "settle_frac", "c_bl", "r_bl", "i_read",
-                   "n_ut", "r_pullup", "v_ratio"],
+                   "v_periph", "sense_mode", "settle_frac", "c_bl", "r_bl",
+                   "i_read", "n_ut", "r_pullup", "v_ratio", "c_cell", "margin_sa"],
     "bounds": ["NBL_min", "NBL_max", "NWL_min", "NWL_max",
                "Nshare_min", "Nshare_max", "Nindep_max", "BW_max"],
 }
@@ -121,11 +121,13 @@ def collect_values(m, problem: ProblemSpec, tech: TechSpec) -> dict:
     """Dict of solved values plus derived report quantities."""
     d = {k: pyo.value(getattr(m, k)) for k in VALUE_KEYS}
     vol_used = (tech.v_cell * d["total_cells"] + tech.v_sa0 * d["N_SA"]
-                + tech.k_vdec * d["cells_x_indep"] + tech.v_sel * d["sel_term"])
+                + tech.k_vdec * d["cells_x_indep"] + tech.v_sel * d["sel_term"]
+                + tech.v_periph * d["N_tot"])
     d["vol_arrays"] = tech.v_cell * d["total_cells"]
     d["vol_sas"] = tech.v_sa0 * d["N_SA"]
     d["vol_dec"] = tech.k_vdec * d["cells_x_indep"]
     d["vol_sel"] = tech.v_sel * d["sel_term"]
+    d["vol_periph"] = tech.v_periph * d["N_tot"]
     d["vol_used"] = vol_used
     d["vol_budget"] = problem.vol_budget
     d["vol_pct"] = 100 * vol_used / problem.vol_budget
@@ -155,7 +157,8 @@ def print_report(name: str, v: dict) -> None:
     print(f"  t_SA+t_sw (floor)     = {v['t_SA'] + v['t_sw']:.4g} ns   develop sum = {v['sum_dev']:.4g} ns")
     print("  ------------------------------------------------------------------")
     print(f"  volume used / budget  = {v['vol_used']:.4g} / {v['vol_budget']:.4g} um^3  ({v['vol_pct']:.1f}%)")
-    print(f"    arrays   = {v['vol_arrays']:.4g}   SAs = {v['vol_sas']:.4g}   dec = {v['vol_dec']:.4g}   sel = {v['vol_sel']:.4g} um^3")
+    print(f"    arrays   = {v['vol_arrays']:.4g}   SAs = {v['vol_sas']:.4g}   dec = {v['vol_dec']:.4g}   sel = {v['vol_sel']:.4g}   periph = {v['vol_periph']:.4g} um^3")
+    print(f"    n_arrays (N_tot)      = {v['N_tot']:.4g}")
     print(f"  capacity  stored/target = {v['total_cells']:.4g} / {v['C']:.4g} bit")
     print("====================================================================")
 

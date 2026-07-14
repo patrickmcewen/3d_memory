@@ -14,7 +14,7 @@ defaults:
 
   # ---- problem inputs (given) ----
   problem:
-    C:       1.0e9      # target capacity                 [bit]  (~1 Gbit)
+    C:       100.0e9      # target capacity                 [bit]  (~800 Gbit)
     A:       800.0e6    # footprint (area per layer)      [um^2]
     L:       8          # layer budget                    [layers]
     t_layer: 1.0        # physical thickness per layer    [um]
@@ -41,15 +41,22 @@ defaults:
     v_sa0:       4.0      # sense-amp volume (constant per amp)     [um^3]
     k_vdec:      0.004    # decoder volume per array cell           [um^3/cell]
     v_sel:       0.2      # selector volume per (share x SA)        [um^3]
-    # ---- sense-settling model (Upton 2024 App. A/B) ----
-    sense_mode:  voltage  # 'current' (App. A) | 'voltage' (App. B)
+    # Fixed periphery per PHYSICAL array (row decoder + WL drivers + array
+    # edge/guard band), independent of array size. Without it a 1-row array is
+    # "free", so the optimizer shrinks N_WL->1 to dodge BL settling; this term
+    # is the amortization pressure that gives a finite optimal subarray height.
+    v_periph:    0.0   # peripheral overhead per array           [um^3/array]
+    # ---- sense-settling model (Upton 2024 App. A/B; DRAM charge-share) ----
+    sense_mode:  voltage  # 'current' (App. A) | 'voltage' (App. B) | 'charge_share' (1T1C DRAM)
     settle_frac: 0.99     # Delta: fraction of steady state to settle to
     c_bl:        0.2      # BL parasitic cap per cell               [fF/cell]  shared
     r_bl:        12.0     # BL wire resistance per cell pitch       [ohm/cell] shared
     i_read:      5.0      # read current            (current mode)  [uA]  per-tech
     n_ut:        0.04     # subthreshold n*Ut       (current mode)  [V]
-    r_pullup:    20000.0  # pull-up resistance      (voltage mode)  [ohm] per-tech
+    r_pullup:    40000.0  # pull-up resistance      (voltage mode)  [ohm] per-tech
     v_ratio:     0.4      # V_BL,CELL/V_READ divider(voltage mode)  [-]
+    c_cell:      25.0     # storage cap per cell    (charge-share)  [fF]  per-tech
+    margin_sa:   0.1      # min charge-share signal C_cell/(C_cell+C_BL) (charge-share) [-]
 
   # ---- variable bounds ----
   bounds:
@@ -80,13 +87,16 @@ configs:
     # inherits all defaults
 
   dram_100Mb:
-    description: Destructive DRAM-like cell; restore folded into t_SA (write-back),
-                 so the t_SA floor is high and sharing buys little. Charge-share
-                 voltage sense.
+    description: Destructive 1T1C DRAM-like cell; passive charge-share read
+                 (series-cap saturates -> ~linear develop, signal-collapse caps
+                 rows), restore folded into t_SA (write-back), so the t_SA floor
+                 is high and sharing buys little.
     technology:
+      sense_mode: charge_share
       destructive: 1
       t_SA0:     0.25
       t_restore: 1.2
+      c_cell:    25.0     # ~25 fF storage cap (JEDEC DRAM design target)
       v_cell:    0.012    # denser bitcell
 
   nvm_100Mb:
@@ -121,8 +131,10 @@ configs:
   # t_SA0 is the intrinsic device read/latch floor (representative validated-
   # silicon read times at the cited nodes -- order-of-magnitude, not exact-at-
   # 16nm). destructive=1 only for charge reads that write back (DRAM/eDRAM).
-  # sense_mode: voltage for latch/charge-share/transistor reads; current for
-  # resistive reads (STT/SOT/RRAM/PCM), which also carry an IV converter, so
+  # sense_mode: voltage for latch (SRAM) / transistor (FeFET, gain-cell) reads;
+  # charge_share for passive 1T1C DRAM/eDRAM (series-cap saturation + signal
+  # collapse); current for resistive reads (STT/SOT/RRAM/PCM), which also carry
+  # an IV converter, so
   # v_sa0 is bumped (DESTINY constant.h:50 IV_CONVERTER_AREA=50000 F^2 ~12.8 um^2).
   #
   # Sources:
@@ -143,18 +155,20 @@ configs:
       v_sa0:  4.0       # voltage latch sense-amp (no IV converter)
 
   edram_16nm:
-    description: 1T1C embedded DRAM; destructive charge-share read (voltage) ->
-                 write-back restore folded into the cycle.
+    description: 1T1C embedded DRAM; destructive passive charge-share read ->
+                 write-back restore folded into the cycle. Denser (smaller)
+                 storage cap than commodity DRAM, so signal collapses at fewer
+                 rows.
     problem:
       L: 4              # 60 F^2 cell fills ~3 layers
     technology:
-      sense_mode: voltage
+      sense_mode: charge_share
       destructive: 1
       t_SA0:     1.5    # charge-share sense; NVSim DRAM tRCD ~15 ns (90 nm), scaled
       t_restore: 6.0    # tRAS-tRCD write-back
       v_cell:    0.0154 # 60 F^2 (DESTINY sample_2D_eDRAM.cell) @ 16 nm
       v_sa0:     4.0
-      r_pullup:  40000.0 # storage cap loads the BL -> slower settle (~2x)
+      c_cell:    10.0   # ~10 fF eDRAM storage cap (denser 1T1C, < commodity DRAM)
 
   sttmram_16nm:
     description: STT-MRAM 1T1R; non-destructive resistive read, current sensing.
@@ -207,7 +221,7 @@ configs:
     technology:
       sense_mode: voltage
       t_SA0:  2.0       # intrinsic sense floor; NVSim-validated 65.9 ns @ 0.12 um total
-      r_pullup: 160000.0 # high pull-up for high-R cell -> slow settle
+      r_pullup: 320000.0 # high pull-up for high-R cell -> slow settle
       v_cell: 0.0064    # 25 F^2 (NVMExplorer 25-40 F^2, low end) @ 16 nm
       v_sa0:  8.0       # voltage sense, larger write drivers
 

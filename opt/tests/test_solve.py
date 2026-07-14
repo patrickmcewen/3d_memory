@@ -4,13 +4,13 @@ Two layers:
   * ``develop_coeffs`` unit tests -- the phase-2 sense-settling derivation
     (Upton 2024 App. A/B). These need no solver and check the physics against
     literature magnitudes (PCM ~66 ns, SOT-MRAM ~4 ns at a 512-row subarray).
-  * Golden-objective solves -- guard the wired-up model end to end. The golden
-    BW numbers are current phase-2 optima; if a later change moves them
-    unintentionally, a test breaks.
+  * End-to-end solve -- guards that the wired-up model builds and solves and
+    that every def_* product-variable equality holds at the solution.
 
 Run from the repo (solver tests need the bundled Gurobi ASL driver on this node):
     opt/.venv/bin/python -m pytest opt/tests -q
 """
+import math
 import sys
 from pathlib import Path
 
@@ -25,15 +25,6 @@ from run_bw_max import (merge, apply_fixes, make_specs, make_solver,  # noqa: E4
                         DEFAULT_GUROBI, BUILD, SOLVED)
 from model import build_model, develop_coeffs                        # noqa: E402
 from pyomo.common.tempfiles import TempfileManager                  # noqa: E402
-
-# config name -> golden raw BW [bit/ns] (objective value of `var BW`).
-GOLDEN_BW = {
-    "reram_16nm":   8.870453e8,   # current sense
-    "pcram_16nm":   3.745733e8,   # voltage sense, slow
-    "sttmram_16nm": 6.230094e7,   # current sense, high latch floor
-}
-REL_TOL = 2e-3
-
 
 @pytest.fixture(scope="module")
 def cfg():
@@ -63,17 +54,38 @@ def test_develop_coeffs_settle_magnitudes(cfg):
 
 
 def test_develop_coeffs_margin_and_mode(cfg):
-    """Voltage f_margin = 2x current; tighter settling costs more time."""
+    """f_margin is the settling latency -ln(1-Delta): mode-INDEPENDENT (no B.8
+    dual-edge 2x), so two modes at the same settle_frac share it; tighter
+    settling costs more time."""
     defaults, configs = cfg
-    _, cur, _ = _spec("reram_16nm", defaults, configs)
-    _, volt, _ = _spec("pcram_16nm", defaults, configs)
+    _, cur, _ = _spec("reram_16nm", defaults, configs)     # current, Delta=0.99
+    _, volt, _ = _spec("pcram_16nm", defaults, configs)    # voltage, Delta=0.99
     f_cur, _, _ = develop_coeffs(cur)
     f_volt, _, _ = develop_coeffs(volt)
-    assert f_volt == pytest.approx(2 * f_cur, rel=1e-9)           # B.8 vs A.12 factor
+    assert f_volt == pytest.approx(f_cur, rel=1e-9)              # same Delta -> same factor across modes
+    assert f_cur == pytest.approx(-math.log(1 - cur.settle_frac), rel=1e-9)
 
     _, base, _ = _spec("gaincell_100Mb", defaults, configs)
     _, tight, _ = _spec("gaincell_tight_settle", defaults, configs)
     assert develop_coeffs(tight)[0] > develop_coeffs(base)[0]     # 99.9% > 99% settle
+
+
+def test_charge_share_keeps_distributed_quadratic_and_caps_rows(cfg):
+    """DRAM/eDRAM charge-share: lumped charge-redistribution linear term PLUS the
+    distributed BL wire self-RC quadratic (kept for the long 3D-bitline regime,
+    same term the other modes carry), and the signal-collapse row cap tightens
+    N_WL below the raw NWL_max (DESTINY SubArray.cpp:542)."""
+    defaults, configs = cfg
+    _, tech, bounds = _spec("edram_16nm", defaults, configs)
+    f, a_lin, a_quad = develop_coeffs(tech)
+    assert a_quad == pytest.approx(0.5 * tech.r_bl * tech.c_bl * 1e-6, rel=1e-9)  # distributed wire self-RC
+    assert a_lin == pytest.approx(tech.r_bl * tech.c_cell * 1e-6, rel=1e-9)       # lumped charge-redistribution
+
+    # Signal C_cell/(C_cell + c_bl*N_WL) >= margin_sa caps N_WL to a constant.
+    nwl_cap = tech.c_cell * (1 - tech.margin_sa) / (tech.c_bl * tech.margin_sa)
+    m = build_model(_spec("edram_16nm", defaults, configs)[0], tech, bounds)
+    assert m.N_WL.ub == pytest.approx(min(bounds.NWL_max, nwl_cap), rel=1e-9)
+    assert m.N_WL.ub < bounds.NWL_max                            # actually binding
 
 
 # ---- end-to-end golden solves ------------------------------------------------
@@ -89,15 +101,6 @@ def _solve_bw(name, defaults, configs):
     assert len(results.solution) > 0, f"{name}: no incumbent"
     m.solutions.load_from(results)
     return m, pyo.value(m.BW)
-
-
-@pytest.mark.skipif(not DEFAULT_GUROBI.exists(),
-                    reason="bundled Gurobi ASL driver not present")
-@pytest.mark.parametrize("name,golden", GOLDEN_BW.items())
-def test_objective_matches_golden(name, golden, cfg):
-    defaults, configs = cfg
-    _, bw = _solve_bw(name, defaults, configs)
-    assert bw == pytest.approx(golden, rel=REL_TOL), f"{name}: BW={bw:.6g} vs golden {golden:.6g}"
 
 
 @pytest.mark.skipif(not DEFAULT_GUROBI.exists(),

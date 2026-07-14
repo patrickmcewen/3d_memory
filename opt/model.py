@@ -62,8 +62,9 @@ class TechSpec:
     v_sa0: float       # sense-amp volume (constant per amp)         [um^3]
     k_vdec: float      # decoder volume per array cell               [um^3/cell]
     v_sel: float       # selector volume per (share x sense-amp)     [um^3]
+    v_periph: float    # fixed peripheral overhead per array         [um^3/array]
     # ---- sense-settling model (Upton 2024 App. A/B) ----
-    sense_mode: str    # 'current' (App. A) or 'voltage' (App. B)
+    sense_mode: str    # 'current' (App. A) | 'voltage' (App. B) | 'charge_share' (DRAM)
     settle_frac: float # Delta: fraction of steady state to settle to (e.g. 0.99)
     c_bl: float        # BL parasitic capacitance per cell            [fF/cell]
     r_bl: float        # BL wire resistance per cell pitch            [ohm/cell]
@@ -71,6 +72,8 @@ class TechSpec:
     n_ut: float        # subthreshold product n*Ut  (current mode)   [V]
     r_pullup: float    # pull-up resistance         (voltage mode)   [ohm]
     v_ratio: float     # V_BL,CELL / V_READ divider  (voltage mode)  [-]
+    c_cell: float      # storage cap per cell  (charge-share mode)   [fF]
+    margin_sa: float   # min charge-share signal fraction (chg mode) [-]
 
     def __post_init__(self):
         assert self.k_dec > 0, f"k_dec must be > 0, got {self.k_dec}"
@@ -84,7 +87,8 @@ class TechSpec:
         assert self.v_sa0 > 0, f"v_sa0 must be > 0, got {self.v_sa0}"
         assert self.k_vdec > 0, f"k_vdec must be > 0, got {self.k_vdec}"
         assert self.v_sel > 0, f"v_sel must be > 0, got {self.v_sel}"
-        assert self.sense_mode in ("current", "voltage"), f"sense_mode must be 'current'|'voltage', got {self.sense_mode!r}"
+        assert self.v_periph >= 0, f"v_periph must be >= 0, got {self.v_periph}"
+        assert self.sense_mode in ("current", "voltage", "charge_share"), f"sense_mode must be 'current'|'voltage'|'charge_share', got {self.sense_mode!r}"
         assert 0 < self.settle_frac < 1, f"settle_frac (Delta) must be in (0,1), got {self.settle_frac}"
         assert self.c_bl > 0, f"c_bl must be > 0, got {self.c_bl}"
         assert self.r_bl >= 0, f"r_bl must be >= 0, got {self.r_bl}"
@@ -92,6 +96,8 @@ class TechSpec:
         assert self.n_ut > 0, f"n_ut must be > 0, got {self.n_ut}"
         assert self.r_pullup > 0, f"r_pullup must be > 0, got {self.r_pullup}"
         assert self.v_ratio > 0, f"v_ratio must be > 0, got {self.v_ratio}"
+        assert self.c_cell > 0, f"c_cell must be > 0, got {self.c_cell}"
+        assert 0 < self.margin_sa < 1, f"margin_sa must be in (0,1), got {self.margin_sa}"
 
 
 @dataclass
@@ -135,20 +141,44 @@ def develop_coeffs(tech: TechSpec):
       * current (App. A, Eq. A.12): tau_C = C_BL * n*Ut / I_read, C_BL = c_bl*N
         -> a_lin = c_bl * n_ut / i_read.  f_margin = -ln(1-Delta) (first-order
         settle of the current signal to within (1-Delta) of steady state).
-      * voltage (App. B, Eqs. B.7/B.8): Elmore tau = v_ratio*(R_pullup+R_BL/2)*C_BL;
+      * voltage (App. B, Eq. B.7): Elmore tau = v_ratio*(R_pullup+R_BL/2)*C_BL;
         pull-up dominates the linear term -> a_lin = v_ratio * r_pullup * c_bl,
-        and the divider ratio also scales the wire term. f_margin = -2 ln(1-Delta)
-        (B.8: T_clk >= -2 tau ln(1-Delta)).
+        and the divider ratio also scales the wire term. f_margin = -ln(1-Delta).
+        NB: B.8 writes T_clk >= -2 tau ln(1-Delta), but that 2x is a dual-edge
+        clock-PERIOD convention (Phase-1 settling occupies a half cycle), not the
+        develop LATENCY. sum_dev is a serial latency, so we use the single-tau
+        settling time -ln(1-Delta) here -- same factor as current/charge modes,
+        which also keeps the SHARED BL wire self-RC (a_quad) consistent across
+        modes (else voltage cells would carry a spurious 2x wire term, biasing
+        the optimal N_WL differently for voltage vs current techs).
+      * charge_share (DRAM/eDRAM, DESTINY SubArray.cpp:542): passive charge
+        redistribution. TWO additive components:
+          (a) lumped charge-redistribution time R_BL*C_cell (a_lin). This is the
+              CACTI-D / CACTI-5.1 / 3D-DATE / DESTINY DRAM convention -- a single
+              series-RC whose series cap C_cell*C_BL/(C_cell+C_BL) saturates at
+              ~C_cell for C_BL >> C_cell, so it is ~linear in rows. Dominates for
+              short bitlines (access-device-limited develop).
+          (b) distributed BL wire self-RC 1/2*r_bl*c_bl*N_WL^2 (a_quad, the shared
+              default). The DRAM-specific tools drop this, but it overtakes (a)
+              once N_WL > ~2*c_cell/c_bl -- exactly the long, thin, resistive
+              3D-BEOL bitline regime this tool explores -- so we keep it, matching
+              the SRAM/current/voltage modes which all carry the same term.
+        The series-cap ratio C_cell/(C_cell+C_BL) governs SIGNAL AMPLITUDE, not
+        settling speed, so it enters ONLY as the N_WL collapse bound in
+        build_model -- never as a develop-time term.
     """
     d = tech.settle_frac
     a_quad = 0.5 * tech.r_bl * tech.c_bl * 1e-6          # BL wire self-RC [ns/cell^2]
     if tech.sense_mode == "current":
         a_lin = tech.c_bl * tech.n_ut / tech.i_read      # tau_C per row   [ns/cell]
         f_margin = -math.log(1.0 - d)
-    else:  # 'voltage' (validated in __post_init__)
+    elif tech.sense_mode == "voltage":
         a_lin = tech.v_ratio * tech.r_pullup * tech.c_bl * 1e-6   # [ns/cell]
         a_quad *= tech.v_ratio                            # divider prefactor on wire term
-        f_margin = -2.0 * math.log(1.0 - d)
+        f_margin = -math.log(1.0 - d)                     # settling latency (no dual-edge 2x; see docstring)
+    else:  # 'charge_share' (validated in __post_init__)
+        a_lin = tech.r_bl * tech.c_cell * 1e-6           # lumped charge-redistribution [ns/cell]
+        f_margin = -math.log(1.0 - d)                    # a_quad kept at default: distributed wire self-RC
     return f_margin, a_lin, a_quad
 
 
@@ -162,9 +192,24 @@ def build_model(problem: ProblemSpec, tech: TechSpec, bounds: Bounds) -> pyo.Con
     m = pyo.ConcreteModel(name="bw_max")
     b = bounds
 
+    # Charge-share (DRAM/eDRAM) signal collapse: the developed signal
+    # C_cell/(C_cell + c_bl*N_WL) must stay above the SA offset margin_sa (this
+    # is why DESTINY caps DRAM subarray rows). Solving the inequality gives a
+    # constant upper bound on the rows, so it enters as a tightened N_WL bound
+    # rather than a develop-time term:
+    #   C_cell/(C_cell + c_bl*N_WL) >= margin_sa
+    #   => N_WL <= C_cell*(1 - margin_sa)/(c_bl*margin_sa)
+    nwl_hi = b.NWL_max
+    if tech.sense_mode == "charge_share":
+        nwl_sig = tech.c_cell * (1.0 - tech.margin_sa) / (tech.c_bl * tech.margin_sa)
+        assert nwl_sig >= b.NWL_min, (
+            f"charge-share signal margin unsatisfiable: N_WL cap {nwl_sig:.1f} "
+            f"< NWL_min {b.NWL_min} (raise c_cell, or lower margin_sa/c_bl)")
+        nwl_hi = min(b.NWL_max, nwl_sig)
+
     # ---- decision variables ------------------------------------------------
     m.N_BL = pyo.Var(bounds=(b.NBL_min, b.NBL_max))       # bitlines  (array columns)
-    m.N_WL = pyo.Var(bounds=(b.NWL_min, b.NWL_max))       # wordlines (array rows)
+    m.N_WL = pyo.Var(bounds=(b.NWL_min, nwl_hi))          # wordlines (array rows; charge-share signal-capped)
     m.b_acc = pyo.Var(bounds=(1, b.NBL_max))              # bits per access (sense width)
     m.N_share = pyo.Var(domain=pyo.Integers, bounds=(b.Nshare_min, b.Nshare_max))  # arrays sharing one periph set
     m.N_indep = pyo.Var(bounds=(1, b.Nindep_max))         # independent peripheral sets
@@ -213,6 +258,7 @@ def build_model(problem: ProblemSpec, tech: TechSpec, bounds: Bounds) -> pyo.Con
         + tech.v_sa0 * m.N_SA                                               # SA volume: constant per amp
         + tech.k_vdec * m.cells_x_indep
         + tech.v_sel * m.sel_term
+        + tech.v_periph * m.N_tot                                          # fixed periphery per array (row dec/WL drivers/edge)
         <= problem.vol_budget
     )
 
