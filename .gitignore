@@ -2,3 +2,4 @@
 **/_work/**
 .claude/
 opt/xvalidate/report.txt
+opt/xvalidate/comparison.csv
