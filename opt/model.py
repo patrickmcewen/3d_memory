@@ -83,10 +83,13 @@ class TechSpec:
     v_ratio: float     # V_BL,CELL / V_READ divider  (voltage mode)  [-]
     c_cell: float      # storage cap per cell  (charge-share mode)   [fF]
     margin_sa: float   # min charge-share signal fraction (chg mode) [-]
+    c_slew: float      # wordline-slew -> bitline-develop coupling (Horowitz input-ramp) [-]
     # ---- energy / power-density model (see energy_coeffs) ----
     v_read: float      # read/precharge supply swing  (CV^2)         [V]
     v_sense: float     # developed sense signal (charge-share only)  [V]
-    e_periph: float    # fixed decode/WL-drive energy per access     [fJ/access]
+    e_periph: float    # fixed decode/control energy per access      [fJ/access]
+    e_periph_col: float # per-column periph energy (decode/precharge/column-mux drive), scales with N_BL [fJ/col]
+    e_sa_read: float   # sense-amp / IV-converter dynamic read energy, per SENSED bit (does NOT amortize with overfetch) [fJ/bit]
     e_write_cell: float # per-cell write energy beyond CV^2 (NVM/DRAM) [fJ/bit]
     p_leak_bit: float  # leakage/refresh power per stored bit         [uW/bit]
     write_fraction: float # fraction of accesses that are writes      [-]
@@ -117,9 +120,12 @@ class TechSpec:
         assert self.v_ratio > 0, f"v_ratio must be > 0, got {self.v_ratio}"
         assert self.c_cell > 0, f"c_cell must be > 0, got {self.c_cell}"
         assert 0 < self.margin_sa < 1, f"margin_sa must be in (0,1), got {self.margin_sa}"
+        assert self.c_slew >= 0, f"c_slew must be >= 0, got {self.c_slew}"
         assert self.v_read > 0, f"v_read must be > 0, got {self.v_read}"
         assert self.v_sense > 0, f"v_sense must be > 0, got {self.v_sense}"
         assert self.e_periph >= 0, f"e_periph must be >= 0, got {self.e_periph}"
+        assert self.e_periph_col >= 0, f"e_periph_col must be >= 0, got {self.e_periph_col}"
+        assert self.e_sa_read >= 0, f"e_sa_read must be >= 0, got {self.e_sa_read}"
         assert self.e_write_cell >= 0, f"e_write_cell must be >= 0, got {self.e_write_cell}"
         assert self.p_leak_bit >= 0, f"p_leak_bit must be >= 0, got {self.p_leak_bit}"
         assert 0 <= self.write_fraction <= 1, f"write_fraction must be in [0,1], got {self.write_fraction}"
@@ -148,9 +154,13 @@ class Bounds:
 def develop_coeffs(tech: TechSpec):
     """Sense-settling develop-time coefficients (Upton 2024, App. A/B).
 
-    Returns ``(f_margin, a_lin, a_quad)`` for the bitline settle time
+    Returns ``(f_margin, a_lin, a_quad)`` for the INTRINSIC (slew-free) bitline
+    settle time
 
-        t_develop = f_margin * (a_lin * N_WL + a_quad * N_WL**2)      [ns]
+        t_BLrc = f_margin * (a_lin * N_WL + a_quad * N_WL**2)      [ns]
+
+    which :func:`build_model` wraps in the wordline-slew (Horowitz) coupling
+    ``t_BL = sqrt(t_BLrc**2 + c_slew * t_BLrc * t_WL)`` -- see there.
 
     with ``N_WL`` = cells along the bitline (rows). The physics is derived here,
     in tested Python, rather than as solver algebra.
@@ -223,20 +233,32 @@ def energy_coeffs(tech: TechSpec):
     system: cap [fF] * V^2 -> fF*V^2 = 1 fJ.
 
     ``V^2`` per sense mode:
-      * voltage / current: full precharge swing ``v_read^2`` (SRAM full-swing
-        latch; resistive-read bitline precharge).                  [DESTINY:687/714]
-      * charge_share: a DESTRUCTIVE read restores the row at the full rail, so
-        it dissipates ``v_read^2`` (write-back dominates DRAM/eDRAM); a hypothetical
-        non-destructive charge read develops only the partial signal
-        ``v_read*v_sense`` (senseVoltage*vdd).                      [DESTINY:699/702]
+      * DESTRUCTIVE read (DRAM/eDRAM): restores the row at the full rail, so it
+        dissipates ``v_read^2`` (write-back dominates).            [DESTINY:699]
+      * NON-DESTRUCTIVE sensed read (voltage latch / gain-cell / non-destructive
+        charge): only the DEVELOPED signal swings on the bitline before the amp
+        fires, so ``v_read*v_sense`` (developed swing ~ MinSenseVoltage), NOT the
+        full rail -- a sensed read does not swing the bitline rail-to-rail.  [DESTINY:702]
+      * current (resistive): the read integrates I_read over the settle time
+        t_s = tau*f_margin (Upton 2024 App. A; tau = C_BL*n_ut/I_read), so the
+        read energy V_read*I_read*t_s = V_read*C_BL*n_ut*f_margin -- the read
+        current CANCELS, leaving an effective swing ``v_read*n_ut*f_margin`` (NOT
+        the full rail). DESTINY's Seevinck-ported CV model is incompatible with
+        resistive reads and underestimates it (App. A p130), so we go with Upton.
 
     Peripheral (decode/WL) energy, per-cell write energy, and leakage are flat
     per-tech params consumed directly in :func:`build_model`.
     """
-    if tech.sense_mode == "charge_share" and not tech.destructive:
-        v2 = tech.v_read * tech.v_sense                  # partial-swing charge develop
-    else:
-        v2 = tech.v_read * tech.v_read                   # full-rail swing (or destructive restore)
+    if tech.destructive:
+        v2 = tech.v_read * tech.v_read                   # destructive read restores at the full rail
+    elif tech.sense_mode == "current":
+        # Upton 2024 App. A: read current integrated over t_s = tau*f_margin,
+        # tau = C_BL*n_ut/I_read -> E = V_read*C_BL*n_ut*f_margin (I_read cancels).
+        # Effective swing v_read*n_ut*f_margin, NOT full rail (DESTINY CV model
+        # incompatible with resistive reads; App. A p130).
+        v2 = tech.v_read * tech.n_ut * (-math.log(1.0 - tech.settle_frac))  # [eq:energy_read_current]
+    else:  # non-destructive voltage / charge_share: only the developed signal swings
+        v2 = tech.v_read * tech.v_sense                  # partial develop swing (sense-margin, not full rail)
     k_col = tech.c_cell * v2                             # [eq:energy_read_access]
     k_arr = tech.c_bl * v2
     return k_col, k_arr
@@ -276,10 +298,19 @@ def build_model(problem: ProblemSpec, tech: TechSpec, bounds: Bounds) -> pyo.Con
     f_margin, a_lin, a_quad = develop_coeffs(tech)
     m.t_dec = pyo.Expression(expr=tech.k_dec * pyo.log(m.N_WL) / math.log(2))       # [eq:decode_depth]
     m.t_WL = pyo.Expression(expr=tech.k_wire_WL * m.N_BL**2 + tech.k_cell_WL * m.N_BL)  # [eq:wl_develop]
-    # BL develop = sense-signal settling (Upton App. A/B): mode-dependent linear
-    # term + shared wire self-RC, times the Delta settle factor. Replaces the
-    # phase-1 k_wire_BL/k_cell_BL polynomial and the constant read time.
-    m.t_BL = pyo.Expression(expr=f_margin * (a_lin * m.N_WL + a_quad * m.N_WL**2))
+    # BL develop = intrinsic sense-signal settling (Upton App. A/B) COMBINED with
+    # the wordline-slew coupling (DESTINY's Horowitz input-ramp): a slow WL edge
+    # turns the access devices on gradually and stretches the bitline develop.
+    #   t_BL = sqrt( t_BLrc^2 + c_slew * t_BLrc * t_WL )
+    # t_BLrc is the slew-free settle (mode-dependent linear term + shared wire
+    # self-RC, x the Delta factor); the cross term scales the penalty with both the
+    # bitline RC (rows) and the WL rise (columns), matching DESTINY's shape. Recovers
+    # the slew-free model as t_WL -> 0 (narrow arrays) or c_slew -> 0.
+    # sqrt goes into the NL as a general nonlinear term (like the log in t_dec);
+    # its argument is a sum of non-negatives, so the domain is always safe.
+    t_bl_rc = f_margin * (a_lin * m.N_WL + a_quad * m.N_WL**2)          # intrinsic, slew-free
+    m.t_BL = pyo.Expression(
+        expr=pyo.sqrt(t_bl_rc**2 + tech.c_slew * t_bl_rc * m.t_WL))     # [eq:wl_slew_coupling]
     # t_SA is the un-hideable latch floor; restore folds in iff destructive (a
     # build-time constant, not a solver decision).
     t_sa_val = tech.t_SA0 + tech.destructive * tech.t_restore
@@ -336,19 +367,25 @@ def build_model(problem: ProblemSpec, tech: TechSpec, bounds: Bounds) -> pyo.Con
 
     # ---- energy / power-density (see energy_coeffs) ------------------------
     # E_access is the blended per-array-access energy: the CV^2 row activation
-    # (dominant, geometry-coupled) plus fixed periphery, plus the write-only
-    # per-cell term weighted by the write fraction. E_bit amortizes it over the
-    # b_acc bits actually delivered (O'Connor row-overfetch: a whole N_BL row
-    # swings, only b_acc bits leave). P_dyn = BW * E_bit is the total dynamic
+    # (dominant, geometry-coupled) plus fixed + per-column periphery, plus the
+    # per-sensed-bit sense-amp read energy and the write-only per-cell term. E_bit
+    # amortizes it over the b_acc bits actually delivered (O'Connor row-overfetch:
+    # a whole N_BL row swings, only b_acc bits leave) -- but the b_acc-scaled
+    # sense-amp/write terms survive amortization as per-bit constants (one IV
+    # converter / write driver per sensed/written bit, so they do NOT overfetch away). P_dyn = BW * E_bit is the total dynamic
     # power; leakage is flat per stored bit. The power density
     # (P_dyn + P_leak)/A_used stays <= P_max, written division-free by moving
     # A_used = vol_used/(L*t_layer) to the RHS -- reusing the volume polynomial.
     k_col, k_arr = energy_coeffs(tech)
     f_w = tech.write_fraction
     m.E_access = pyo.Expression(
-        expr=k_col * m.N_BL + k_arr * m.cells_arr + tech.e_periph
+        expr=k_col * m.N_BL + k_arr * m.cells_arr
+        + tech.e_periph + tech.e_periph_col * m.N_BL                        # fixed + per-column (decode/precharge/mux) periphery
+        + tech.e_sa_read * m.b_acc                                          # per-sensed-bit sense-amp/IV-converter read energy (NOT overfetch-amortized)
         + f_w * tech.e_write_cell * m.b_acc)                                # [fJ] per single-array access
-    E_bit_ub = (k_col * b.NBL_max + k_arr * b.NBL_max * nwl_hi + tech.e_periph
+    E_bit_ub = (k_col * b.NBL_max + k_arr * b.NBL_max * nwl_hi
+                + tech.e_periph + tech.e_periph_col * b.NBL_max
+                + tech.e_sa_read * b.NBL_max
                 + f_w * tech.e_write_cell * b.NBL_max)                       # b_acc >= 1 => E_bit <= E_access_max
     m.E_bit = pyo.Var(bounds=(0, E_bit_ub))                                  # [fJ/bit]
     m.P_dyn = pyo.Var(bounds=(0, problem.P_max * problem.A))                 # [uW]; <= P_max * footprint

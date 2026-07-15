@@ -39,7 +39,7 @@ import yaml
 HERE = Path(__file__).resolve().parent
 OPT = HERE.parent
 MEMROOT = OPT.parent.parent                       # .../memory
-DESTINY_DIR = MEMROOT / "destiny_3d_cache"
+DESTINY_DIR = MEMROOT / "3d_memory" / "destiny_3d_cache"   # the git submodule
 DESTINY_BIN = DESTINY_DIR / "destiny"
 
 sys.path.insert(0, str(OPT))

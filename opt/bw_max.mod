@@ -27,7 +27,7 @@ param t_layer  > 0;            # physical thickness per layer         [um]
 param VolBudget := A * L * t_layer;   # total 3D volume packed against [um^3]
 
 #### ---- technology / calibration coefficients ----------------------------
-#### TODO(calibration): placeholder values; replace with a memory_model fit.
+#### TODO(calibration): placeholder values; replace with a destiny_3d_cache fit.
 param k_dec     > 0;   # decoder delay per address bit                [ns]
 # WL/BL develop split into a distributed wire self-RC term (quadratic in the
 # cells along the line; set by the BEOL wire stack + node, so SHAREABLE across

@@ -1,6 +1,6 @@
 # 3d_memory :: example instance + placeholder calibration
 # TODO(calibration): every technology coefficient below is a stand-in until the
-# memory_model characterization fit is wired in.
+# destiny_3d_cache characterization fit is wired in.
 
 # ---- problem inputs (given) ----
 param C       := 1e8;    # 100 Mbit

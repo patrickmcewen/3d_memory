@@ -45,8 +45,9 @@ PARAMS = {
                    "v_pre", "v_wldrv", "v_sel",
                    "v_periph", "sense_mode", "settle_frac", "c_bl", "r_bl",
                    "i_read", "n_ut", "r_pullup", "v_ratio", "c_cell", "margin_sa",
-                   "v_read", "v_sense", "e_periph", "e_write_cell", "p_leak_bit",
-                   "write_fraction"],
+                   "c_slew",
+                   "v_read", "v_sense", "e_periph", "e_periph_col", "e_sa_read",
+                   "e_write_cell", "p_leak_bit", "write_fraction"],
     "bounds": ["NBL_min", "NBL_max", "NWL_min", "NWL_max",
                "Nshare_min", "Nshare_max", "Nindep_max"],
 }
@@ -156,7 +157,8 @@ def collect_values(m, problem: ProblemSpec, tech: TechSpec) -> dict:
     d["E_access"] = d["E_bit"] * d["b_acc"]                 # [fJ] per single-array access
     d["e_bitcell"] = k_col * d["N_BL"]                      # per-bitline cell/access CV^2
     d["e_blwire"] = k_arr * d["cells_arr"]                  # distributed BL wire CV^2 over the row
-    d["e_periph"] = tech.e_periph                           # fixed decode/WL-drive energy
+    d["e_periph"] = tech.e_periph + tech.e_periph_col * d["N_BL"]  # fixed decode/control + per-column (decode/precharge/mux) periph
+    d["e_sa"] = tech.e_sa_read * d["b_acc"]                 # per-sensed-bit sense-amp/IV-converter read energy
     d["e_write"] = tech.write_fraction * tech.e_write_cell * d["b_acc"]  # write-only per-cell term
     d["overfetch"] = d["N_BL"] / d["b_acc"]                 # K: whole row swings, only b_acc bits leave
     # Every pyo.Var value, keyed by name (declaration order) -- future-proof: new

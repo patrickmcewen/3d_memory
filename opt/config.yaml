@@ -24,13 +24,13 @@ defaults:
     P_max:   1.1        # power-density ceiling           [W/mm^2 == uW/um^2]
 
   # ---- technology / calibration coefficients ----
-  # Peripheral volumes calibrated 2026-07-14 from the `memory_model` subarray tool
-  # (SRAM_GEN size sweep; reproduce with opt/calibrate_periph.py): each block's per-row/per-column
-  # area SLOPE is separated from the fixed intercept, normalized to F^2 (F=Lgate),
+  # Peripheral volumes calibrated 2026-07-14 from the destiny_3d_cache submodule
+  # (SRAM subarray sweep; reproduce with opt/calibrate_periph.py): each block's per-row/per-column
+  # area SLOPE is separated from the fixed intercept, normalized to F^2 (F=ProcessNode),
   # then to 16 nm volume via v = area_F2*(16e-3 um)^2*t_layer -- the same currency
   # as v_cell. The CMOS periphery (v_wldrv, v_sa0 voltage latch, v_pre, v_periph)
-  # is a shared logic process, so it lives in `defaults`; the terms memory_model
-  # CANNOT model -- resistive SET/RESET write drivers (v_wdrv), HV BL/SL pass gates
+  # is a shared logic process, so it lives in `defaults`; the terms the SRAM sweep
+  # CANNOT lay out -- resistive SET/RESET write drivers (v_wdrv), HV BL/SL pass gates
   # (v_pass), and current-sense IV converters (v_sa0) -- stay EMBER/DESTINY-anchored
   # in the per-type overrides below.
   technology:
@@ -45,26 +45,29 @@ defaults:
     # derived in opt/model.py::develop_coeffs from the physical params below:
     #   t_BL = f_margin(Delta,mode) * (a_lin*N_WL + a_quad*N_WL^2)
     # a_quad = 1/2*r_bl*c_bl (shared BL wire self-RC); a_lin per sense mode.
-    t_SA0:       0.2      # intrinsic device read/latch floor       [ns]  per-tech
+    t_SA0:       0.05     # sense-amp/comparator resolve floor (voltage latch); develop carried by t_BL. Per-tech override for slower reads [ns]
     t_restore:   0.8      # restore time (destructive read)         [ns]
     destructive: 0        # 1 => fold restore into t_SA (DRAM-like)
-    t_sw:        0.03     # selector switching time                 [ns]
+    t_sw:        0.007    # selector / column-mux switching time     [ns]  (DESTINY column-mux ~6.5 ps)
     # Per-component peripheral volumes (model.py::TechSpec / build_model). Each
     # circuit block scales by its own physical law; a block a technology lacks is
     # zeroed (e.g. charge-share DRAM: v_wdrv=0, write-back via the sense amp).
     # SHARED endpoints (per sensed/written bit, scale with N_SA):
     v_cell:      0.02     # volume per stored bit                   [um^3/bit]
-    v_sa0:       0.26     # voltage-latch sense amp, per sensed bit [um^3/bit] (memory_model SRAM fit; current-sense +IV converter overrides below)
+    v_sa0:       0.125    # voltage-latch sense amp, per sensed bit [um^3/bit] (destiny_3d_cache SRAM fit; current-sense +IV converter overrides below)
     v_wdrv:      0.05     # CMOS bitline write driver, per access bit [um^3/bit] (resistive SET/RESET drivers override large)
     # PER-ARRAY in-array strips (scale with columns/rows over every array):
     v_pass:      0.0      # HV BL/SL pass-gate, per column          [um^3/col] (0 for CMOS-accessed cells; resistive 1T1R overrides)
-    v_pre:       0.017    # precharger, per column                  [um^3/col] (memory_model SRAM fit)
-    v_wldrv:     2.65     # WL driver + row decoder, per row        [um^3/row] (memory_model SRAM fit; DOMINANT CMOS periphery)
+    v_pre:       0.12     # precharger, per column                  [um^3/col] (destiny_3d_cache SRAM fit)
+    v_wldrv:     0.648    # WL driver + row decoder, per row        [um^3/row] (destiny_3d_cache SRAM fit; DOMINANT CMOS periphery)
     v_sel:       0.2      # inter-array sharing selector, per (EXTRA shared array x SA) [um^3] (0 at N_share=1)
-    v_periph:    90.0     # fixed decode/control overhead per array [um^3/array] (memory_model fixed intercept)
+    v_periph:    3.47     # fixed decode/control overhead per array [um^3/array] (destiny_3d_cache BL-strip intercept)
     # ---- sense-settling model (Upton 2024 App. A/B; DRAM charge-share) ----
     sense_mode:  voltage  # 'current' (App. A) | 'voltage' (App. B) | 'charge_share' (1T1C DRAM)
-    settle_frac: 0.99     # Delta: fraction of steady state to settle to
+    settle_frac: 0.99     # Delta: BL develop target. Full-settle fallback; voltage tech points
+                          #   override to the sense-margin fraction (V_margin/V_signal ~= 0.1) --
+                          #   a sensed read fires at the margin, not full settle. Current-mode kept
+                          #   at full-settle (DESTINY current-bitline untrusted, model retained).
     c_bl:        0.2      # BL parasitic cap per cell               [fF/cell]  shared
     r_bl:        12.0     # BL wire resistance per cell pitch       [ohm/cell] shared
     i_read:      5.0      # read current            (current mode)  [uA]  per-tech
@@ -73,6 +76,7 @@ defaults:
     v_ratio:     0.4      # V_BL,CELL/V_READ divider(voltage mode)  [-]
     c_cell:      25.0     # storage cap per cell    (charge-share)  [fF]  per-tech
     margin_sa:   0.1      # min charge-share signal C_cell/(C_cell+C_BL) (charge-share) [-]
+    c_slew:      4.0      # wordline-slew -> bitline-develop coupling (Horowitz input-ramp); calibrated vs DESTINY wide-column widening [-]
     # ---- energy / power-density model (opt/model.py::energy_coeffs) ----
     # Read energy = (c_cell + c_bl*N_WL)*V_read^2*N_BL + e_periph, amortized over
     # b_acc bits. V_read is the CV^2 swing (full rail for latch/resistive reads
@@ -81,8 +85,10 @@ defaults:
     # bit (NVM Joule set/reset); leakage is p_leak_bit per stored bit (DRAM
     # refresh, SRAM gate leak).
     v_read:         1.0     # read/precharge supply swing            [V]  per-tech
-    v_sense:        0.1     # developed charge-share signal          [V]  (charge-share only)
-    e_periph:       50.0    # fixed decode/WL-drive energy/access    [fJ/access]
+    v_sense:        0.1     # developed sense signal (read swing ~ MinSenseVoltage) [V] (voltage + charge-share reads)
+    e_periph:       85.0    # fixed decode/control energy/access      [fJ/access] (DESTINY periph intercept)
+    e_periph_col:   0.75    # per-column periph: decode/precharge/column-mux drive [fJ/col] (DESTINY periph slope, shared)
+    e_sa_read:      0.0     # sense-amp/IV-converter read energy, per SENSED bit [fJ/bit] (0 for voltage latch -- SA folded in e_periph; current-sense overrides per EMBER)
     e_write_cell:   0.0     # per-cell write energy beyond CV^2      [fJ/bit]  per-tech (NVM)
     p_leak_bit:     1.0e-6  # leakage/refresh power per stored bit   [uW/bit]  per-tech
     write_fraction: 0.0     # fraction of accesses that are writes   [-]  (0 = read-BW study)
@@ -112,7 +118,8 @@ configs:
 
   gaincell_100Mb:
     description: Non-destructive gain-cell macro; read-FET voltage sense (baseline).
-    # inherits all defaults
+    technology:
+      settle_frac: 0.1  # sense-margin fraction; read-FET sense fires at the margin (t_SA0/t_sw inherit voltage-latch defaults)
 
   dram_100Mb:
     description: Destructive 1T1C DRAM-like cell; passive charge-share read
@@ -133,8 +140,9 @@ configs:
     technology:
       sense_mode: current
       t_SA0:  0.6
+      e_sa_read: 500.0    # sense-amp/IV-converter read energy per sensed bit (EMBER Fig. 5.26: VSA ~0.5 pJ/bit @40nm, dominant current-sense read cost; IV area in v_sa0)
       i_read: 3.0         # weaker read current -> slower settle
-      v_sa0:  13.0        # current sense + DESTINY IV converter
+      v_sa0:  12.9        # current sense + DESTINY IV converter
       v_wdrv: 30.0        # resistive SET/RESET needs wide HV write drivers
       v_pass: 0.5         # HV BL/SL pass gates, edge-stacked (pitch > cell)
       v_cell: 0.03
@@ -150,6 +158,8 @@ configs:
                  peripheral bandwidth at the same capacity).
     problem:
       A: 1.6e9
+    technology:
+      settle_frac: 0.1  # sense-margin fraction (matches the gaincell baseline)
 
   # =====================================================================
   # Literature-calibrated technology points (added 2026-07-13; migrated to
@@ -181,9 +191,10 @@ configs:
                  (146 F^2) so 100 Mb needs a tall stack.
     technology:
       sense_mode: voltage
-      t_SA0:  0.5       # NVMExplorer read 0.5-1.5 ns (7-16 nm)
+      settle_frac: 0.1  # sense-margin fraction (MinSenseVoltage/signal); latch fires at the margin, not full settle
+      t_SA0:  0.05      # latch regeneration floor (develop carried by t_BL); NVMExplorer 0.5-1.5 ns is end-to-end, not the latch alone
       v_cell: 0.0374    # 146 F^2 (NVMExplorer / DESTINY sample_SRAM.cell) @ 16 nm
-      # v_sa0 inherits the memory_model voltage-latch default (0.26)
+      # v_sa0 inherits the destiny_3d_cache voltage-latch default (0.125)
 
   edram_16nm:
     description: 1T1C embedded DRAM; destructive passive charge-share read ->
@@ -198,7 +209,7 @@ configs:
       t_SA0:     1.5    # charge-share sense; NVSim DRAM tRCD ~15 ns (90 nm), scaled
       t_restore: 6.0    # tRAS-tRCD write-back
       v_cell:    0.0154 # 60 F^2 (DESTINY sample_2D_eDRAM.cell) @ 16 nm
-      # v_sa0 inherits the memory_model voltage-latch default (0.26)
+      # v_sa0 inherits the destiny_3d_cache voltage-latch default (0.125)
       v_wdrv:    0.0    # destructive charge-share writes back through the sense amp
       c_cell:    10.0   # ~10 fF eDRAM storage cap (denser 1T1C, < commodity DRAM)
 
@@ -207,9 +218,10 @@ configs:
     technology:
       sense_mode: current
       t_SA0:  5.0       # NVMExplorer read 1.3-19 ns; DESTINY-validated 4.83 ns (45 nm)
+      e_sa_read: 500.0  # sense-amp/IV-converter read energy per sensed bit (EMBER Fig. 5.26: VSA ~0.5 pJ/bit @40nm, dominant current-sense read cost; IV area in v_sa0)
       i_read: 4.0       # TMR read current
       v_cell: 0.00512   # 20 F^2 (NVMExplorer 14-75 F^2, low end) @ 16 nm
-      v_sa0:  13.0      # 0.26 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
+      v_sa0:  12.9      # 0.125 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
       v_wdrv: 20.0      # STT switching-current write driver
       v_pass: 0.3       # HV BL/SL pass gates
 
@@ -219,9 +231,10 @@ configs:
     technology:
       sense_mode: current
       t_SA0:  4.0       # NVMExplorer read 1.4-11 ns; DESTINY-validated 3.8 ns (SLC)
+      e_sa_read: 500.0  # sense-amp/IV-converter read energy per sensed bit (EMBER Fig. 5.26: VSA ~0.5 pJ/bit @40nm, dominant current-sense read cost; IV area in v_sa0)
       i_read: 5.0
       v_cell: 0.00512   # 20 F^2 (NVMExplorer single point) @ 16 nm
-      v_sa0:  13.0      # 0.26 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
+      v_sa0:  12.9      # 0.125 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
       v_wdrv: 20.0      # SOT write-current driver
       v_pass: 0.3       # HV BL/SL pass gates
 
@@ -230,10 +243,11 @@ configs:
     technology:
       sense_mode: current
       t_SA0:  0.3       # latch floor; read time is settling-dominated (EMBER ~5 ns)
+      e_sa_read: 500.0  # sense-amp/IV-converter read energy per sensed bit (EMBER Fig. 5.26: VSA ~0.5 pJ/bit @40nm, dominant current-sense read cost; IV area in v_sa0)
       i_read: 3.0       # 1T1R access-limited read current
       t_sw:   0.05      # 1T1R access + bleed-path selector
       v_cell: 0.00307   # 12 F^2 (NVMExplorer 4-53 F^2, 1T1R access-limited) @ 16 nm
-      v_sa0:  13.0      # 0.26 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
+      v_sa0:  12.9      # 0.125 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
       v_wdrv: 40.0      # RRAM SET/RESET HV drivers dominate periphery (EMBER: BL/SL drivers+muxes ~33%)
       v_pass: 0.5       # HV BL/SL pass gates, edge-stacked (EMBER Fig. 6)
 
@@ -248,10 +262,11 @@ configs:
     technology:
       sense_mode: current
       t_SA0:  0.3       # latch floor; sneak-path settling carries the read time
+      e_sa_read: 500.0  # sense-amp/IV-converter read energy per sensed bit (EMBER Fig. 5.26: VSA ~0.5 pJ/bit @40nm, dominant current-sense read cost; IV area in v_sa0)
       i_read: 2.0       # weak crosspoint read current (sneak paths)
       t_sw:   0.1       # 2-terminal selector nonlinearity (no access transistor)
       v_cell: 0.001024  # 4 F^2 (NVSim cross-point 0T1R/1D1R) @ 16 nm
-      v_sa0:  13.0      # 0.26 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
+      v_sa0:  12.9      # 0.125 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
       v_wdrv: 15.0      # SET/RESET drivers present, but no per-cell 1T1R access FET (0T1R density win)
       v_wldrv: 0.3      # 0T1R row line is an edge current driver, NOT a CMOS row decoder (no access-FET gate stack) -> << the SRAM-fit default 2.65
       # v_pass stays at the default (0.0): 0T1R has no HV access/pass transistor;
@@ -262,7 +277,8 @@ configs:
                  (high cell resistance -> weak divider signal -> slow settle).
     technology:
       sense_mode: voltage
-      t_SA0:  2.0       # intrinsic sense floor; NVSim-validated 65.9 ns @ 0.12 um total
+      settle_frac: 0.1  # sense-margin fraction; PCM voltage read still fires at the comparator margin
+      t_SA0:  2.0       # intrinsic sense floor; NVSim-validated 65.9 ns @ 0.12 um total. PCM reads are genuinely slow -- kept high; DESTINY's generic voltage read under-models this
       r_pullup: 320000.0 # high pull-up for high-R cell -> slow settle
       v_cell: 0.0064    # 25 F^2 (NVMExplorer 25-40 F^2, low end) @ 16 nm
       v_sa0:  1.0       # voltage sense; high-R cell -> weak signal comparator > SRAM latch
@@ -274,6 +290,7 @@ configs:
                  Fast read, very low write energy.
     technology:
       sense_mode: voltage
-      t_SA0:  1.0       # FeRAM read ~14 ns; FeFET read faster (transistor sense)
+      settle_frac: 0.1  # sense-margin fraction; transistor sense fires at the margin, not full settle
+      t_SA0:  0.05      # comparator resolve floor (develop carried by t_BL); FeRAM ~14 ns figures are end-to-end reads
       v_cell: 0.00384   # 15 F^2 (NVMExplorer FeFET 4-103 F^2) @ 16 nm
-      # v_sa0 inherits the memory_model voltage-latch default (0.26)
+      # v_sa0 inherits the destiny_3d_cache voltage-latch default (0.125)

@@ -25,7 +25,7 @@ nvsim:
 destiny:
   cite: "Mittal et al., DESTINY: A Comprehensive Tool with 3D and MLC Memory Modeling, JLPEA 2017"
   local: "literature/tools/Mittal et al. - 2017 - DESTINY A Comprehensive Tool with 3D and Multi-Level Cell Memory Modeling Capability.pdf"
-  note: "Sample cell files (config/*.cell); SubArray sense/power model. Source read: destiny_3d_cache/SubArray.cpp, constant.h."
+  note: "Sample cell files (config/*.cell); SubArray sense/power model + component area (RowDecoder/SenseAmp/Precharger/Mux ::CalculateArea). Source read: destiny_3d_cache/{SubArray,RowDecoder,SenseAmp,Precharger,Mux}.cpp, constant.h."
 cacti6:
   cite: "Muralimanohar et al., CACTI 6.0: A Tool to Model Large Caches, HP Labs TR"
   local: "literature/tools/Muralimanohar et al. - CACTI 6.0 A Tool to Model Large Caches.pdf"
@@ -39,7 +39,7 @@ dreamram:
 # ---- sensing / settling physics ----
 upton2024:
   cite: "Upton, sense-amplifier settling-time analysis (PhD thesis), 2024"
-  local: null   # TODO: add thesis PDF path; App. A = current-mode, App. B = voltage-mode settling
+  local: /pool0/pmcewen/rsgvm13dir/codesign2/memory/literature/sensing/Peripheral_Circuit_Design_Tech.pdf
   note: "App. A Eq. A.9/A.12 (current-mode tau_C, settling log-bracket); App. B Eq. B.7/B.8 (voltage-mode Elmore tau)."
 ember:
   cite: "Upton et al., EMBER: A 100 MHz Multiple-Bits-per-Cell RRAM Macro in 40 nm CMOS, ESSCIRC 2023"
@@ -86,12 +86,6 @@ lepri2022:
   cite: "Lepri et al., Modeling and Compensation of IR Drop in Crosspoint Accelerators, 2022"
   local: "literature/sensing/Lepri et al. - 2022 - Modeling and Compensation of IR Drop in Crosspoint Accelerators of Neural Networks.pdf"
   note: "IR-drop-limited crosspoint subarray size (caps 0T1R N_BL/N_WL)."
-
-# ---- in-house calibration ----
-memory_model:
-  cite: "In-house memory_model subarray tool (SRAM_GEN size sweep), calibrated 2026-07-14"
-  local: "memory_model/"
-  note: "Peripheral-volume slope/intercept fit normalized to F^2 then to 16 nm volume (scratch fit_periph.py). See MEMORY.md :: memory-model-genfet-only."
 
 # ---- pseudo-sources (keep coverage honest; not real citations) ----
 design_choice:
