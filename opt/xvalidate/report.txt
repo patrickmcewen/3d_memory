@@ -1,0 +1,754 @@
+
+=== gaincell_100Mb  [DESTINY cell: SRAM]   subarray 256 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             125.90      177.45       1.41x
+  bitline                88.18       89.63       1.02x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                  6.50        7.00       1.08x
+  TOTAL(dev)            223.24      324.07       1.45x
+  (precharge*)          162.65          --    off-path
+  (non-htree*)            3.21          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          1076.0     19507.2      18.13x
+  periph                 273.0        50.0       0.18x
+  TOTAL(access)         1349.0     19557.2      14.50x
+  per-bit                21.08      305.58      14.50x
+  (non-htree E*)        1207.0          --    overhead
+
+=== gaincell_100Mb  [DESTINY cell: SRAM]   subarray 512 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             135.71      197.45       1.45x
+  bitline               145.67      185.88       1.28x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                  6.50        7.00       1.08x
+  TOTAL(dev)            290.53      440.33       1.52x
+  (precharge*)          333.81          --    off-path
+  (non-htree*)           11.67          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          2147.0     32614.4      15.19x
+  periph                 273.0        50.0       0.18x
+  TOTAL(access)         2420.0     32664.4      13.50x
+  per-bit                37.81      510.38      13.50x
+  (non-htree E*)        2335.0          --    overhead
+
+=== gaincell_100Mb  1024x256: SKIPPED (DESTINY produced no valid subarray for gaincell_100Mb_1024x256:)
+
+=== gaincell_100Mb  2048x256: SKIPPED (DESTINY produced no valid subarray for gaincell_100Mb_2048x256:)
+
+=== gaincell_100Mb  4096x256: SKIPPED (DESTINY produced no valid subarray for gaincell_100Mb_4096x256:)
+
+=== gaincell_100Mb  256x1024: SKIPPED (DESTINY produced no valid subarray for gaincell_100Mb_256x1024:)
+
+=== gaincell_100Mb  [DESTINY cell: SRAM]   subarray 512 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             282.98      336.30       1.19x
+  bitline               272.07      185.88       0.68x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                 13.73        7.00       0.51x
+  TOTAL(dev)            571.44      579.18       1.01x
+  (precharge*)          337.36          --    off-path
+  (non-htree*)           10.13          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          8592.0    130457.6      15.18x
+  periph                 846.0        50.0       0.06x
+  TOTAL(access)         9438.0    130507.6      13.83x
+  per-bit               147.47     2039.18      13.83x
+  (non-htree E*)        2233.0          --    overhead
+
+=== gaincell_100Mb  [DESTINY cell: SRAM]   subarray 1024 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             290.48      356.30       1.23x
+  bitline               417.22      398.28       0.95x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                 13.73        7.00       0.51x
+  TOTAL(dev)            724.09      811.58       1.12x
+  (precharge*)          731.04          --    off-path
+  (non-htree*)           24.43          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell         17161.0    235315.2      13.71x
+  periph                 846.0        50.0       0.06x
+  TOTAL(access)        18007.0    235365.2      13.07x
+  per-bit               281.36     3677.58      13.07x
+  (non-htree E*)        7966.0          --    overhead
+
+=== gaincell_100Mb  [DESTINY cell: SRAM]   subarray 2048 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             302.33      376.30       1.24x
+  bitline               691.03      902.61       1.31x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                 13.73        7.00       0.51x
+  TOTAL(dev)           1009.75     1335.91       1.32x
+  (precharge*)         1724.00          --    off-path
+  (non-htree*)           47.87          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell         34301.0    445030.4      12.97x
+  periph                 846.0        50.0       0.06x
+  TOTAL(access)        35147.0    445080.4      12.66x
+  per-bit               549.17     6954.38      12.66x
+  (non-htree E*)       15813.0          --    overhead
+
+=== gaincell_100Mb  4096x1024: SKIPPED (DESTINY produced no valid subarray for gaincell_100Mb_4096x1024:)
+
+=== dram_100Mb  256x256: SKIPPED (DESTINY produced no valid subarray for dram_100Mb_256x256:)
+
+=== dram_100Mb  512x256: SKIPPED (DESTINY produced no valid subarray for dram_100Mb_512x256:)
+
+=== dram_100Mb  1024x256: SKIPPED (DESTINY produced no valid subarray for dram_100Mb_1024x256:)
+
+=== dram_100Mb  2048x256: SKIPPED (DESTINY produced no valid subarray for dram_100Mb_2048x256:)
+
+=== dram_100Mb  4096x256: SKIPPED (DESTINY produced no valid subarray for dram_100Mb_4096x256:)
+
+=== dram_100Mb  256x1024: SKIPPED (DESTINY produced no valid subarray for dram_100Mb_256x1024:)
+
+=== dram_100Mb  512x1024: SKIPPED (DESTINY produced no valid subarray for dram_100Mb_512x1024:)
+
+=== dram_100Mb  1024x1024: SKIPPED (DESTINY produced no valid subarray for dram_100Mb_1024x1024:)
+
+=== dram_100Mb  2048x1024: SKIPPED (DESTINY produced no valid subarray for dram_100Mb_2048x1024:)
+
+=== dram_100Mb  4096x1024: SKIPPED (DESTINY produced no valid subarray for dram_100Mb_4096x1024:)
+
+=== nvm_100Mb  [DESTINY cell: memristor]   subarray 256 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             357.54      177.45       0.50x
+  bitline                 9.74     3505.96     360.10x
+  senseamp             1454.00      600.00       0.41x
+  mux/sw                 23.43        7.00       0.30x
+  TOTAL(dev)           1844.74     4290.41       2.33x
+  (precharge*)          568.39          --    off-path
+  (non-htree*)            6.14          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell            16.0     19507.2    1219.20x
+  periph                9849.0        50.0       0.01x
+  TOTAL(access)         9865.0     19557.2       1.98x
+  per-bit               154.14      305.58       1.98x
+  (non-htree E*)        1320.0          --    overhead
+
+=== nvm_100Mb  [DESTINY cell: memristor]   subarray 512 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             382.91      197.45       0.52x
+  bitline                38.94     7736.25     198.66x
+  senseamp             1454.00      600.00       0.41x
+  mux/sw                 23.43        7.00       0.30x
+  TOTAL(dev)           1899.35     8540.70       4.50x
+  (precharge*)         1145.00          --    off-path
+  (non-htree*)           17.02          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell            16.0     32614.4    2038.40x
+  periph                9849.0        50.0       0.01x
+  TOTAL(access)         9865.0     32664.4       3.31x
+  per-bit               154.14      510.38       3.31x
+  (non-htree E*)        2227.0          --    overhead
+
+=== nvm_100Mb  1024x256: SKIPPED (DESTINY produced no valid subarray for nvm_100Mb_1024x256:)
+
+=== nvm_100Mb  2048x256: SKIPPED (DESTINY produced no valid subarray for nvm_100Mb_2048x256:)
+
+=== nvm_100Mb  4096x256: SKIPPED (DESTINY produced no valid subarray for nvm_100Mb_4096x256:)
+
+=== nvm_100Mb  256x1024: SKIPPED (DESTINY produced no valid subarray for nvm_100Mb_256x1024:)
+
+=== nvm_100Mb  [DESTINY cell: memristor]   subarray 512 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             764.93      336.30       0.44x
+  bitline                38.94     7736.25     198.66x
+  senseamp             1454.00      600.00       0.41x
+  mux/sw                 48.43        7.00       0.14x
+  TOTAL(dev)           2306.65     8679.56       3.76x
+  (precharge*)         1150.00          --    off-path
+  (non-htree*)           11.50          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell            15.0    130457.6    8697.17x
+  periph               10407.0        50.0       0.00x
+  TOTAL(access)        10422.0    130507.6      12.52x
+  per-bit               162.84     2039.18      12.52x
+  (non-htree E*)        1880.0          --    overhead
+
+=== nvm_100Mb  [DESTINY cell: memristor]   subarray 1024 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             781.48      356.30       0.46x
+  bitline               155.74    18369.83     117.95x
+  senseamp             1454.00      600.00       0.41x
+  mux/sw                 48.43        7.00       0.14x
+  TOTAL(dev)           2439.71    19333.13       7.92x
+  (precharge*)         2363.00          --    off-path
+  (non-htree*)           47.48          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell            16.0    235315.2   14707.20x
+  periph               10407.0        50.0       0.00x
+  TOTAL(access)        10423.0    235365.2      22.58x
+  per-bit               162.86     3677.58      22.58x
+  (non-htree E*)        3869.0          --    overhead
+
+=== nvm_100Mb  [DESTINY cell: memristor]   subarray 2048 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             814.71      376.30       0.46x
+  bitline               622.76    48328.95      77.60x
+  senseamp             1454.00      600.00       0.41x
+  mux/sw                 48.43        7.00       0.14x
+  TOTAL(dev)           2940.05    49312.25      16.77x
+  (precharge*)         5021.00          --    off-path
+  (non-htree*)           96.79          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell            19.0    445030.4   23422.65x
+  periph               10407.0        50.0       0.00x
+  TOTAL(access)        10426.0    445080.4      42.69x
+  per-bit               162.91     6954.38      42.69x
+  (non-htree E*)       12865.0          --    overhead
+
+=== nvm_100Mb  4096x1024: SKIPPED (DESTINY produced no valid subarray for nvm_100Mb_4096x1024:)
+
+=== sram_16nm  [DESTINY cell: SRAM]   subarray 256 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             135.06      177.45       1.31x
+  bitline               112.78       89.63       0.79x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                  6.50        7.00       1.08x
+  TOTAL(dev)            256.99      324.07       1.26x
+  (precharge*)          213.13          --    off-path
+  (non-htree*)            5.62          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          1397.0     19507.2      13.96x
+  periph                 293.0        50.0       0.17x
+  TOTAL(access)         1690.0     19557.2      11.57x
+  per-bit                26.41      305.58      11.57x
+  (non-htree E*)        1598.0          --    overhead
+
+=== sram_16nm  [DESTINY cell: SRAM]   subarray 512 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             145.69      197.45       1.36x
+  bitline               188.47      185.88       0.99x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                  6.50        7.00       1.08x
+  TOTAL(dev)            343.31      440.33       1.28x
+  (precharge*)          447.81          --    off-path
+  (non-htree*)           16.85          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          2789.0     32614.4      11.69x
+  periph                 293.0        50.0       0.17x
+  TOTAL(access)         3082.0     32664.4      10.60x
+  per-bit                48.16      510.38      10.60x
+  (non-htree E*)        5284.0          --    overhead
+
+=== sram_16nm  1024x256: SKIPPED (DESTINY produced no valid subarray for sram_16nm_1024x256:)
+
+=== sram_16nm  2048x256: SKIPPED (DESTINY produced no valid subarray for sram_16nm_2048x256:)
+
+=== sram_16nm  4096x256: SKIPPED (DESTINY produced no valid subarray for sram_16nm_4096x256:)
+
+=== sram_16nm  [DESTINY cell: SRAM]   subarray 256 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             354.26      316.30       0.89x
+  bitline               255.48       89.63       0.35x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                 13.73        7.00       0.51x
+  TOTAL(dev)            626.13      462.93       0.74x
+  (precharge*)          216.90          --    off-path
+  (non-htree*)            4.78          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          5590.0     78028.8      13.96x
+  periph                 915.0        50.0       0.05x
+  TOTAL(access)         6505.0     78078.8      12.00x
+  per-bit               101.64     1219.98      12.00x
+  (non-htree E*)        1513.0          --    overhead
+
+=== sram_16nm  [DESTINY cell: SRAM]   subarray 512 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             364.77      336.30       0.92x
+  bitline               372.94      185.88       0.50x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                 13.73        7.00       0.51x
+  TOTAL(dev)            754.11      579.18       0.77x
+  (precharge*)          451.62          --    off-path
+  (non-htree*)           15.98          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell         11158.0    130457.6      11.69x
+  periph                 915.0        50.0       0.05x
+  TOTAL(access)        12073.0    130507.6      10.81x
+  per-bit               188.64     2039.18      10.81x
+  (non-htree E*)        5145.0          --    overhead
+
+=== sram_16nm  [DESTINY cell: SRAM]   subarray 1024 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             372.12      356.30       0.96x
+  bitline               573.35      398.28       0.69x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                 13.73        7.00       0.51x
+  TOTAL(dev)            961.86      811.58       0.84x
+  (precharge*)         1012.00          --    off-path
+  (non-htree*)           32.95          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell         22294.0    235315.2      10.56x
+  periph                 915.0        50.0       0.05x
+  TOTAL(access)        23209.0    235365.2      10.14x
+  per-bit               362.64     3677.58      10.14x
+  (non-htree E*)       10746.0          --    overhead
+
+=== sram_16nm  [DESTINY cell: SRAM]   subarray 2048 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             387.06      376.30       0.97x
+  bitline               955.38      902.61       0.94x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                 13.73        7.00       0.51x
+  TOTAL(dev)           1358.70     1335.91       0.98x
+  (precharge*)         2500.00          --    off-path
+  (non-htree*)           64.92          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell         44566.0    445030.4       9.99x
+  periph                 915.0        50.0       0.05x
+  TOTAL(access)        45481.0    445080.4       9.79x
+  per-bit               710.64     6954.38       9.79x
+  (non-htree E*)       21445.0          --    overhead
+
+=== sram_16nm  4096x1024: SKIPPED (DESTINY produced no valid subarray for sram_16nm_4096x1024:)
+
+=== edram_16nm  256x256: SKIPPED (DESTINY produced no valid subarray for edram_16nm_256x256:)
+
+=== edram_16nm  512x256: SKIPPED (DESTINY produced no valid subarray for edram_16nm_512x256:)
+
+=== edram_16nm  1024x256: SKIPPED (DESTINY produced no valid subarray for edram_16nm_1024x256:)
+
+=== edram_16nm  2048x256: SKIPPED (DESTINY produced no valid subarray for edram_16nm_2048x256:)
+
+=== edram_16nm  4096x256: SKIPPED (DESTINY produced no valid subarray for edram_16nm_4096x256:)
+
+=== edram_16nm  256x1024: SKIPPED (DESTINY produced no valid subarray for edram_16nm_256x1024:)
+
+=== edram_16nm  512x1024: SKIPPED (DESTINY produced no valid subarray for edram_16nm_512x1024:)
+
+=== edram_16nm  1024x1024: SKIPPED (DESTINY produced no valid subarray for edram_16nm_1024x1024:)
+
+=== edram_16nm  2048x1024: SKIPPED (DESTINY produced no valid subarray for edram_16nm_2048x1024:)
+
+=== edram_16nm  4096x1024: SKIPPED (DESTINY produced no valid subarray for edram_16nm_4096x1024:)
+
+=== sttmram_16nm  [DESTINY cell: MRAM]   subarray 256 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             140.53      177.45       1.26x
+  bitline                 2.36     2720.01    1154.50x
+  senseamp             1454.00     5000.00       3.44x
+  mux/sw                  3.40        7.00       2.06x
+  TOTAL(dev)           1600.49     7904.46       4.94x
+  (precharge*)          139.12          --    off-path
+  (non-htree*)            3.77          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          4359.0     19507.2       4.48x
+  periph                9905.0        50.0       0.01x
+  TOTAL(access)        14264.0     19557.2       1.37x
+  per-bit               222.88      305.58       1.37x
+  (non-htree E*)        1309.0          --    overhead
+
+=== sttmram_16nm  [DESTINY cell: MRAM]   subarray 512 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             146.88      197.45       1.34x
+  bitline                 9.28     6164.36     664.26x
+  senseamp             1454.00     5000.00       3.44x
+  mux/sw                  3.40        7.00       2.06x
+  TOTAL(dev)           1613.64    11368.80       7.05x
+  (precharge*)          274.50          --    off-path
+  (non-htree*)            6.18          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          4366.0     32614.4       7.47x
+  periph                9905.0        50.0       0.01x
+  TOTAL(access)        14271.0     32664.4       2.29x
+  per-bit               222.98      510.38       2.29x
+  (non-htree E*)        1699.0          --    overhead
+
+=== sttmram_16nm  [DESTINY cell: MRAM]   subarray 1024 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             149.73      217.45       1.45x
+  bitline                36.04    15226.03     422.44x
+  senseamp             1454.00     5000.00       3.44x
+  mux/sw                  3.40        7.00       2.06x
+  TOTAL(dev)           1643.12    20450.48      12.45x
+  (precharge*)          559.44          --    off-path
+  (non-htree*)           12.44          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          4386.0     58828.8      13.41x
+  periph                9905.0        50.0       0.01x
+  TOTAL(access)        14291.0     58878.8       4.12x
+  per-bit               223.30      919.98       4.12x
+  (non-htree E*)        2443.0          --    overhead
+
+=== sttmram_16nm  2048x256: SKIPPED (DESTINY produced no valid subarray for sttmram_16nm_2048x256:)
+
+=== sttmram_16nm  4096x256: SKIPPED (DESTINY produced no valid subarray for sttmram_16nm_4096x256:)
+
+=== sttmram_16nm  256x1024: SKIPPED (DESTINY produced no valid subarray for sttmram_16nm_256x1024:)
+
+=== sttmram_16nm  512x1024: SKIPPED (DESTINY produced no valid subarray for sttmram_16nm_512x1024:)
+
+=== sttmram_16nm  [DESTINY cell: MRAM]   subarray 1024 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             377.50      356.30       0.94x
+  bitline                36.04    15226.03     422.44x
+  senseamp             1454.00     5000.00       3.44x
+  mux/sw                  9.30        7.00       0.75x
+  TOTAL(dev)           1876.86    20589.34      10.97x
+  (precharge*)          562.89          --    off-path
+  (non-htree*)            5.47          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          4478.0    235315.2      52.55x
+  periph               10574.0        50.0       0.00x
+  TOTAL(access)        15052.0    235365.2      15.64x
+  per-bit               235.19     3677.58      15.64x
+  (non-htree E*)        1662.0          --    overhead
+
+=== sttmram_16nm  2048x1024: SKIPPED (DESTINY produced no valid subarray for sttmram_16nm_2048x1024:)
+
+=== sttmram_16nm  4096x1024: SKIPPED (DESTINY produced no valid subarray for sttmram_16nm_4096x1024:)
+
+=== sotmram_16nm  [DESTINY cell: MRAM]   subarray 256 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             140.53      177.45       1.26x
+  bitline                 2.36     2248.44     954.35x
+  senseamp             1454.00     4000.00       2.75x
+  mux/sw                  3.40        7.00       2.06x
+  TOTAL(dev)           1600.49     6432.89       4.02x
+  (precharge*)          139.12          --    off-path
+  (non-htree*)            3.77          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          4359.0     19507.2       4.48x
+  periph                9905.0        50.0       0.01x
+  TOTAL(access)        14264.0     19557.2       1.37x
+  per-bit               222.88      305.58       1.37x
+  (non-htree E*)        1309.0          --    overhead
+
+=== sotmram_16nm  [DESTINY cell: MRAM]   subarray 512 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             146.88      197.45       1.34x
+  bitline                 9.28     5221.22     562.63x
+  senseamp             1454.00     4000.00       2.75x
+  mux/sw                  3.40        7.00       2.06x
+  TOTAL(dev)           1613.64     9425.67       5.84x
+  (precharge*)          274.50          --    off-path
+  (non-htree*)            6.18          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          4366.0     32614.4       7.47x
+  periph                9905.0        50.0       0.01x
+  TOTAL(access)        14271.0     32664.4       2.29x
+  per-bit               222.98      510.38       2.29x
+  (non-htree E*)        1699.0          --    overhead
+
+=== sotmram_16nm  [DESTINY cell: MRAM]   subarray 1024 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             149.73      217.45       1.45x
+  bitline                36.04    13339.76     370.11x
+  senseamp             1454.00     4000.00       2.75x
+  mux/sw                  3.40        7.00       2.06x
+  TOTAL(dev)           1643.12    17564.20      10.69x
+  (precharge*)          559.44          --    off-path
+  (non-htree*)           12.44          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          4386.0     58828.8      13.41x
+  periph                9905.0        50.0       0.01x
+  TOTAL(access)        14291.0     58878.8       4.12x
+  per-bit               223.30      919.98       4.12x
+  (non-htree E*)        2443.0          --    overhead
+
+=== sotmram_16nm  2048x256: SKIPPED (DESTINY produced no valid subarray for sotmram_16nm_2048x256:)
+
+=== sotmram_16nm  4096x256: SKIPPED (DESTINY produced no valid subarray for sotmram_16nm_4096x256:)
+
+=== sotmram_16nm  256x1024: SKIPPED (DESTINY produced no valid subarray for sotmram_16nm_256x1024:)
+
+=== sotmram_16nm  512x1024: SKIPPED (DESTINY produced no valid subarray for sotmram_16nm_512x1024:)
+
+=== sotmram_16nm  [DESTINY cell: MRAM]   subarray 1024 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             377.50      356.30       0.94x
+  bitline                36.04    13339.76     370.11x
+  senseamp             1454.00     4000.00       2.75x
+  mux/sw                  9.30        7.00       0.75x
+  TOTAL(dev)           1876.86    17703.06       9.43x
+  (precharge*)          562.89          --    off-path
+  (non-htree*)            5.47          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          4478.0    235315.2      52.55x
+  periph               10574.0        50.0       0.00x
+  TOTAL(access)        15052.0    235365.2      15.64x
+  per-bit               235.19     3677.58      15.64x
+  (non-htree E*)        1662.0          --    overhead
+
+=== sotmram_16nm  2048x1024: SKIPPED (DESTINY produced no valid subarray for sotmram_16nm_2048x1024:)
+
+=== sotmram_16nm  4096x1024: SKIPPED (DESTINY produced no valid subarray for sotmram_16nm_4096x1024:)
+
+=== reram_16nm  [DESTINY cell: memristor]   subarray 256 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             330.72      177.45       0.54x
+  bitline                 4.02     3505.96     872.78x
+  senseamp             1454.00      300.00       0.21x
+  mux/sw                 23.43       50.00       2.13x
+  TOTAL(dev)           1811.68     4033.41       2.23x
+  (precharge*)          720.82          --    off-path
+  (non-htree*)            7.94          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell            16.0     19507.2    1219.20x
+  periph                9805.0        50.0       0.01x
+  TOTAL(access)         9821.0     19557.2       1.99x
+  per-bit               153.45      305.58       1.99x
+  (non-htree E*)        1501.0          --    overhead
+
+=== reram_16nm  512x256: SKIPPED (DESTINY produced no valid subarray for reram_16nm_512x256:)
+
+=== reram_16nm  1024x256: SKIPPED (DESTINY produced no valid subarray for reram_16nm_1024x256:)
+
+=== reram_16nm  2048x256: SKIPPED (DESTINY produced no valid subarray for reram_16nm_2048x256:)
+
+=== reram_16nm  4096x256: SKIPPED (DESTINY produced no valid subarray for reram_16nm_4096x256:)
+
+=== reram_16nm  [DESTINY cell: memristor]   subarray 256 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             463.44      316.30       0.68x
+  bitline                 4.02     3505.96     872.78x
+  senseamp             1454.00      300.00       0.21x
+  mux/sw                 48.43       50.00       1.03x
+  TOTAL(dev)           1969.50     4172.26       2.12x
+  (precharge*)          724.67          --    off-path
+  (non-htree*)            1.14          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell            16.0     78028.8    4876.80x
+  periph               10249.0        50.0       0.00x
+  TOTAL(access)        10265.0     78078.8       7.61x
+  per-bit               160.39     1219.98       7.61x
+  (non-htree E*)         584.0          --    overhead
+
+=== reram_16nm  [DESTINY cell: memristor]   subarray 512 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             482.49      336.30       0.70x
+  bitline                16.07     7736.25     481.47x
+  senseamp             1454.00      300.00       0.21x
+  mux/sw                 48.43       50.00       1.03x
+  TOTAL(dev)           2001.29     8422.56       4.21x
+  (precharge*)         1443.00          --    off-path
+  (non-htree*)            2.49          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell            16.0    130457.6    8153.60x
+  periph               10249.0        50.0       0.00x
+  TOTAL(access)        10265.0    130507.6      12.71x
+  per-bit               160.39     2039.18      12.71x
+  (non-htree E*)         874.0          --    overhead
+
+=== reram_16nm  [DESTINY cell: memristor]   subarray 1024 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             488.83      356.30       0.73x
+  bitline                64.27    18369.83     285.84x
+  senseamp             1454.00      300.00       0.21x
+  mux/sw                 48.43       50.00       1.03x
+  TOTAL(dev)           2055.21    19076.13       9.28x
+  (precharge*)         2905.00          --    off-path
+  (non-htree*)            6.75          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell            17.0    235315.2   13842.07x
+  periph               10249.0        50.0       0.00x
+  TOTAL(access)        10266.0    235365.2      22.93x
+  per-bit               160.41     3677.58      22.93x
+  (non-htree E*)        1459.0          --    overhead
+
+=== reram_16nm  [DESTINY cell: memristor]   subarray 2048 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             503.27      376.30       0.75x
+  bitline               257.04    48328.95     188.02x
+  senseamp             1454.00      300.00       0.21x
+  mux/sw                 48.43       50.00       1.03x
+  TOTAL(dev)           2263.07    49055.25      21.68x
+  (precharge*)         5924.00          --    off-path
+  (non-htree*)           24.74          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell            19.0    445030.4   23422.65x
+  periph               10249.0        50.0       0.00x
+  TOTAL(access)        10268.0    445080.4      43.35x
+  per-bit               160.44     6954.38      43.35x
+  (non-htree E*)        2829.0          --    overhead
+
+=== reram_16nm  4096x1024: SKIPPED (DESTINY produced no valid subarray for reram_16nm_4096x1024:)
+
+=== reram_xpoint_16nm  256x256: SKIPPED (DESTINY produced no valid subarray for reram_xpoint_16nm_256x256:)
+
+=== reram_xpoint_16nm  512x256: SKIPPED (DESTINY produced no valid subarray for reram_xpoint_16nm_512x256:)
+
+=== reram_xpoint_16nm  1024x256: SKIPPED (DESTINY produced no valid subarray for reram_xpoint_16nm_1024x256:)
+
+=== reram_xpoint_16nm  2048x256: SKIPPED (DESTINY produced no valid subarray for reram_xpoint_16nm_2048x256:)
+
+=== reram_xpoint_16nm  4096x256: SKIPPED (DESTINY produced no valid subarray for reram_xpoint_16nm_4096x256:)
+
+=== reram_xpoint_16nm  256x1024: SKIPPED (DESTINY produced no valid subarray for reram_xpoint_16nm_256x1024:)
+
+=== reram_xpoint_16nm  512x1024: SKIPPED (DESTINY produced no valid subarray for reram_xpoint_16nm_512x1024:)
+
+=== reram_xpoint_16nm  1024x1024: SKIPPED (DESTINY produced no valid subarray for reram_xpoint_16nm_1024x1024:)
+
+=== reram_xpoint_16nm  2048x1024: SKIPPED (DESTINY produced no valid subarray for reram_xpoint_16nm_2048x1024:)
+
+=== reram_xpoint_16nm  4096x1024: SKIPPED (DESTINY produced no valid subarray for reram_xpoint_16nm_4096x1024:)
+
+=== pcram_16nm  [DESTINY cell: PCRAM]   subarray 256 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             117.63      177.45       1.51x
+  bitline                81.88      693.81       8.47x
+  senseamp                2.66     2000.00     753.01x
+  mux/sw                  1.51        7.00       4.64x
+  TOTAL(dev)            213.84     2878.25      13.46x
+  (precharge*)           79.77          --    off-path
+  (non-htree*)            0.34          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          1026.0     19507.2      19.01x
+  periph                 406.0        50.0       0.12x
+  TOTAL(access)         1432.0     19557.2      13.66x
+  per-bit                22.38      305.58      13.66x
+  (non-htree E*)         392.0          --    overhead
+
+=== pcram_16nm  [DESTINY cell: PCRAM]   subarray 512 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             125.08      197.45       1.58x
+  bitline               148.72     1394.24       9.38x
+  senseamp                2.66     2000.00     753.01x
+  mux/sw                  1.51        7.00       4.64x
+  TOTAL(dev)            288.18     3598.69      12.49x
+  (precharge*)          153.96          --    off-path
+  (non-htree*)            1.22          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          1997.0     32614.4      16.33x
+  periph                 406.0        50.0       0.12x
+  TOTAL(access)         2403.0     32664.4      13.59x
+  per-bit                37.55      510.38      13.59x
+  (non-htree E*)         753.0          --    overhead
+
+=== pcram_16nm  [DESTINY cell: PCRAM]   subarray 1024 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             128.68      217.45       1.69x
+  bitline               287.07     2814.99       9.81x
+  senseamp                2.66     2000.00     753.01x
+  mux/sw                  1.51        7.00       4.64x
+  TOTAL(dev)            430.20     5039.44      11.71x
+  (precharge*)          310.21          --    off-path
+  (non-htree*)            5.78          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          3939.0     58828.8      14.93x
+  periph                 406.0        50.0       0.12x
+  TOTAL(access)         4345.0     58878.8      13.55x
+  per-bit                67.89      919.98      13.55x
+  (non-htree E*)        1664.0          --    overhead
+
+=== pcram_16nm  2048x256: SKIPPED (DESTINY produced no valid subarray for pcram_16nm_2048x256:)
+
+=== pcram_16nm  4096x256: SKIPPED (DESTINY produced no valid subarray for pcram_16nm_4096x256:)
+
+=== pcram_16nm  256x1024: SKIPPED (DESTINY produced no valid subarray for pcram_16nm_256x1024:)
+
+=== pcram_16nm  512x1024: SKIPPED (DESTINY produced no valid subarray for pcram_16nm_512x1024:)
+
+=== pcram_16nm  [DESTINY cell: PCRAM]   subarray 1024 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             245.85      356.30       1.45x
+  bitline               321.33     2814.99       8.76x
+  senseamp                2.66     2000.00     753.01x
+  mux/sw                  4.93        7.00       1.42x
+  TOTAL(dev)            715.76     5178.30       7.23x
+  (precharge*)          313.75          --    off-path
+  (non-htree*)            4.56          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell         15719.0    235315.2      14.97x
+  periph                1338.0        50.0       0.04x
+  TOTAL(access)        17057.0    235365.2      13.80x
+  per-bit               266.52     3677.58      13.80x
+  (non-htree E*)        1518.0          --    overhead
+
+=== pcram_16nm  2048x1024: SKIPPED (DESTINY produced no valid subarray for pcram_16nm_2048x1024:)
+
+=== pcram_16nm  4096x1024: SKIPPED (DESTINY produced no valid subarray for pcram_16nm_4096x1024:)
+
+=== fefet_16nm  [DESTINY cell: SRAM]   subarray 256 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             110.49      177.45       1.61x
+  bitline                53.00       89.63       1.69x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                  6.50        7.00       1.08x
+  TOTAL(dev)            172.64      324.07       1.88x
+  (precharge*)           89.02          --    off-path
+  (non-htree*)            0.55          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell           586.0     19507.2      33.29x
+  periph                 240.0        50.0       0.21x
+  TOTAL(access)          826.0     19557.2      23.68x
+  per-bit                12.91      305.58      23.68x
+  (non-htree E*)         500.0          --    overhead
+
+=== fefet_16nm  [DESTINY cell: SRAM]   subarray 512 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             118.67      197.45       1.66x
+  bitline                84.22      185.88       2.21x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                  6.50        7.00       1.08x
+  TOTAL(dev)            212.04      440.33       2.08x
+  (precharge*)          174.08          --    off-path
+  (non-htree*)            2.68          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          1167.0     32614.4      27.95x
+  periph                 240.0        50.0       0.21x
+  TOTAL(access)         1407.0     32664.4      23.22x
+  per-bit                21.98      510.38      23.22x
+  (non-htree E*)        1119.0          --    overhead
+
+=== fefet_16nm  1024x256: SKIPPED (DESTINY produced no valid subarray for fefet_16nm_1024x256:)
+
+=== fefet_16nm  2048x256: SKIPPED (DESTINY produced no valid subarray for fefet_16nm_2048x256:)
+
+=== fefet_16nm  4096x256: SKIPPED (DESTINY produced no valid subarray for fefet_16nm_4096x256:)
+
+=== fefet_16nm  256x1024: SKIPPED (DESTINY produced no valid subarray for fefet_16nm_256x1024:)
+
+=== fefet_16nm  [DESTINY cell: SRAM]   subarray 512 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             186.03      336.30       1.81x
+  bitline               137.96      185.88       1.35x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                 13.73        7.00       0.51x
+  TOTAL(dev)            340.38      579.18       1.70x
+  (precharge*)          177.15          --    off-path
+  (non-htree*)            2.00          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          4668.0    130457.6      27.95x
+  periph                 741.0        50.0       0.07x
+  TOTAL(access)         5409.0    130507.6      24.13x
+  per-bit                84.52     2039.18      24.13x
+  (non-htree E*)         993.0          --    overhead
+
+=== fefet_16nm  [DESTINY cell: SRAM]   subarray 1024 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             189.75      356.30       1.88x
+  bitline               209.62      398.28       1.90x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                 13.73        7.00       0.51x
+  TOTAL(dev)            415.76      811.58       1.95x
+  (precharge*)          359.31          --    off-path
+  (non-htree*)            9.39          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell          9314.0    235315.2      25.26x
+  periph                 741.0        50.0       0.07x
+  TOTAL(access)        10055.0    235365.2      23.41x
+  per-bit               157.11     3677.58      23.41x
+  (non-htree E*)        2177.0          --    overhead
+
+=== fefet_16nm  [DESTINY cell: SRAM]   subarray 2048 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]         DESTINY       model   model/DST
+  decode+WL             197.14      376.30       1.91x
+  bitline               342.10      902.61       2.64x
+  senseamp                2.66       50.00      18.83x
+  mux/sw                 13.73        7.00       0.51x
+  TOTAL(dev)            555.62     1335.91       2.40x
+  (precharge*)          772.34          --    off-path
+  (non-htree*)           21.67          --    overhead
+  ENERGY [fJ]          DESTINY       model   model/DST
+  bitline+cell         18606.0    445030.4      23.92x
+  periph                 741.0        50.0       0.07x
+  TOTAL(access)        19347.0    445080.4      23.01x
+  per-bit               302.30     6954.38      23.01x
+  (non-htree E*)        7158.0          --    overhead
+
+=== fefet_16nm  4096x1024: SKIPPED (DESTINY produced no valid subarray for fefet_16nm_4096x1024:)
+
+wrote /nfs/pool0/pmcewen/rsgvm13dir/codesign2/memory/3d_memory/opt/xvalidate/comparison.csv
