@@ -1,0 +1,255 @@
+# 3d_memory :: per-value provenance ledger (sidecar to config.yaml).
+#
+# Keyed by "<scope>.<block>.<param>" where <scope> is `defaults` or a config
+# name, e.g. sram_16nm.technology.v_cell. Each entry:
+#     src:    [<id>, ...]   one or more source ids from sources.yaml (required)
+#     loc:    "..."         exact table/eq/file:line locator (recommended)
+#     derive: "<expr>"      OPTIONAL math expr that must evaluate to the config
+#                           value (checked to 1% by check_provenance.py). Present
+#                           only when the number is COMPUTED from cited inputs;
+#                           omitted for direct-quote or representative anchors.
+#     note:   "..."         OPTIONAL freeform.
+#
+# Feature-normalized cell areas use the common 16 nm mapping
+#     v_cell [um^3/bit] = cellArea_F2 * (16e-3 um)^2 * t_layer(=1 um) = F2 * 2.56e-4
+# IV-converter-bearing current-sense amps use  0.26 (memory_model latch) +
+#     50000 F^2 * 2.56e-4 (DESTINY constant.h:50 IV_CONVERTER_AREA) = 13.06 um^3.
+#
+# The runtime model does NOT read this file. Validate with:
+#     opt/.venv/bin/python opt/check_provenance.py
+# `assumption` / `design_choice` srcs mark values with no literature anchor yet
+# (grep them to see the back-validation TODO list).
+
+exempt: []          # every calibrated value is expected to have an entry below
+
+provenance:
+
+  # ===================================================================
+  # defaults.problem -- study setup (deliberate design points + thermal cap)
+  # ===================================================================
+  defaults.problem.C:       {src: [design_choice], loc: "~800 Gbit target capacity for the DSE study"}
+  defaults.problem.A:       {src: [design_choice], loc: "800e6 um^2 = 800 mm^2 per-layer footprint"}
+  defaults.problem.L:       {src: [design_choice], loc: "8-layer monolithic-3D stack budget"}
+  defaults.problem.t_layer: {src: [design_choice], loc: "1 um physical thickness per active layer"}
+  defaults.problem.P_max:   {src: [akgun2016, lee2025_thermal], loc: "1.1 W/mm^2 liquid-cooling ceiling (0.4 air / 2.0 microfluidic presets)"}
+
+  # ===================================================================
+  # defaults.technology -- shared logic-process coeffs + baseline gain cell
+  # ===================================================================
+  # Timing / decode
+  defaults.technology.k_dec:      {src: [assumption], loc: "decoder delay per address bit ~0.02 ns"}
+  defaults.technology.k_wire_WL:  {src: [assumption], loc: "WL wire self-RC 1/2*r*c per column^2 (BEOL stack)"}
+  defaults.technology.k_cell_WL:  {src: [assumption], loc: "WL per-cell gate load per column"}
+  defaults.technology.t_SA0:      {src: [assumption], loc: "gain-cell intrinsic read/latch floor ~0.2 ns"}
+  defaults.technology.t_restore:  {src: [assumption], loc: "destructive-read restore ~0.8 ns (unused when destructive=0)"}
+  defaults.technology.destructive: {src: [design_choice], loc: "0 = non-destructive baseline (gain cell)"}
+  defaults.technology.t_sw:       {src: [assumption], loc: "selector switching time ~0.03 ns"}
+  # Peripheral component volumes -- memory_model SRAM_GEN fit (2026-07-14)
+  defaults.technology.v_cell:   {src: [assumption], loc: "generic gain-cell bit volume ~0.02 um^3 (per-tech overrides below)"}
+  defaults.technology.v_sa0:    {src: [memory_model], loc: "voltage-latch sense amp fit, per sensed bit"}
+  defaults.technology.v_wdrv:   {src: [memory_model], loc: "CMOS bitline write driver, per access bit (resistive drivers override)"}
+  defaults.technology.v_pass:   {src: [assumption], loc: "0 for CMOS-accessed cells (HV pass gate only for resistive 1T1R)"}
+  defaults.technology.v_pre:    {src: [memory_model], loc: "precharger fit, per column"}
+  defaults.technology.v_wldrv:  {src: [memory_model], loc: "WL driver + row decoder fit, per row (dominant CMOS periphery)"}
+  defaults.technology.v_sel:    {src: [assumption], loc: "inter-array sharing selector, per (extra shared array x SA)"}
+  defaults.technology.v_periph: {src: [memory_model], loc: "fixed decode/control intercept, per array"}
+  # Sense-settling model (Upton 2024 App. A/B)
+  defaults.technology.sense_mode:  {src: [assumption], loc: "voltage-sense baseline (transistor/latch read)"}
+  defaults.technology.settle_frac: {src: [design_choice], loc: "Delta = settle to 99% of steady state (read-margin choice)"}
+  defaults.technology.c_bl:        {src: [assumption], loc: "BL parasitic cap ~0.2 fF/cell (shared wire stack)"}
+  defaults.technology.r_bl:        {src: [assumption], loc: "BL wire resistance ~12 ohm/cell pitch (shared)"}
+  defaults.technology.i_read:      {src: [assumption], loc: "steady-state read current ~5 uA (current mode; per-tech override)"}
+  defaults.technology.n_ut:        {src: [assumption], loc: "subthreshold n*Ut ~0.04 V (~1.5x kT/q); Upton App. A tau_C"}
+  defaults.technology.r_pullup:    {src: [assumption], loc: "voltage-mode pull-up ~40 kohm (per-tech override)"}
+  defaults.technology.v_ratio:     {src: [assumption], loc: "V_BL,CELL/V_READ divider ratio ~0.4 (voltage mode)"}
+  defaults.technology.c_cell:      {src: [jedec_dram], loc: "~25 fF 1T1C storage-cap design target (charge-share mode)"}
+  defaults.technology.margin_sa:   {src: [assumption], loc: "min charge-share signal fraction ~0.1 (SA offset margin)"}
+  # Energy / power-density model (DESTINY SubArray::CalculatePower)
+  defaults.technology.v_read:         {src: [destiny], loc: "read/precharge supply swing (CV^2); SubArray.cpp:687"}
+  defaults.technology.v_sense:        {src: [ha2018], loc: "developed charge-share signal ~0.1 V (dV = V_BLP/(1+C_BL/C_S))"}
+  defaults.technology.e_periph:       {src: [destiny], loc: "fixed decode/WL-drive energy per access; SubArray.cpp:685-775"}
+  defaults.technology.e_write_cell:   {src: [design_choice], loc: "0 for the read-BW study (NVM Joule set/reset when >0)"}
+  defaults.technology.p_leak_bit:     {src: [assumption], loc: "leakage/refresh power per stored bit ~1e-6 uW/bit"}
+  defaults.technology.write_fraction: {src: [design_choice], loc: "0 = pure read-BW study"}
+
+  # ===================================================================
+  # Generic 100 Mb baselines (older placeholder tech points)
+  # ===================================================================
+  dram_100Mb.technology.sense_mode:  {src: [ha2018], loc: "1T1C passive charge-share read"}
+  dram_100Mb.technology.destructive: {src: [assumption], loc: "1 = write-back restore folded into cycle (DRAM-like)"}
+  dram_100Mb.technology.t_SA0:       {src: [assumption], loc: "charge-share sense floor ~0.25 ns"}
+  dram_100Mb.technology.t_restore:   {src: [assumption], loc: "tRAS-tRCD write-back ~1.2 ns"}
+  dram_100Mb.technology.c_cell:      {src: [jedec_dram], loc: "~25 fF storage cap (JEDEC design target)"}
+  dram_100Mb.technology.v_cell:      {src: [assumption], loc: "denser 1T1C bitcell placeholder ~0.012 um^3"}
+  dram_100Mb.technology.v_wdrv:      {src: [assumption], loc: "0: charge-share writes back through the sense amp"}
+
+  nvm_100Mb.technology.sense_mode: {src: [ember, nvsim], loc: "resistive current sensing"}
+  nvm_100Mb.technology.t_SA0:      {src: [assumption], loc: "resistive read floor ~0.6 ns"}
+  nvm_100Mb.technology.i_read:     {src: [assumption], loc: "weak read current ~3 uA"}
+  nvm_100Mb.technology.v_sa0:      {src: [memory_model, destiny], loc: "0.26 latch + DESTINY IV converter (50000 F^2)", derive: "0.26 + 50000 * 2.56e-4"}
+  nvm_100Mb.technology.v_wdrv:     {src: [assumption], loc: "resistive SET/RESET HV write drivers ~30 um^3"}
+  nvm_100Mb.technology.v_pass:     {src: [assumption], loc: "HV BL/SL pass gates ~0.5 um^3/col"}
+  nvm_100Mb.technology.v_cell:     {src: [assumption], loc: "resistive NVM placeholder ~117 F^2", derive: "117 * 2.56e-4"}
+
+  gaincell_tight_settle.technology.settle_frac: {src: [design_choice], loc: "Delta = 0.999 (tighter read margin sweep)"}
+
+  gaincell_big_footprint.problem.A: {src: [design_choice], loc: "2x baseline footprint sweep", derive: "2 * 800.0e6"}
+
+  # ===================================================================
+  # Literature-calibrated 16 nm technology points (2026-07-13/14)
+  # ===================================================================
+  # --- 6T SRAM ---
+  sram_16nm.technology.sense_mode: {src: [assumption], loc: "voltage: fast latch sense"}
+  sram_16nm.technology.t_SA0:      {src: [nvmexplorer], loc: "Table I read 0.5-1.5 ns (7-16 nm)"}
+  sram_16nm.technology.v_cell:     {src: [nvmexplorer, destiny], loc: "146 F^2 (sample_SRAM.cell) @16nm", derive: "146 * 2.56e-4"}
+
+  # --- embedded DRAM (1T1C) ---
+  edram_16nm.problem.L:              {src: [design_choice], loc: "4 layers (60 F^2 cell fills ~3)"}
+  edram_16nm.technology.sense_mode:  {src: [ha2018], loc: "charge_share: passive 1T1C read"}
+  edram_16nm.technology.destructive: {src: [assumption], loc: "1 = write-back restore folded in"}
+  edram_16nm.technology.t_SA0:       {src: [nvsim], loc: "charge-share sense; DRAM tRCD ~15 ns (90 nm) scaled"}
+  edram_16nm.technology.t_restore:   {src: [nvsim], loc: "tRAS-tRCD write-back ~6 ns"}
+  edram_16nm.technology.v_cell:      {src: [destiny], loc: "60 F^2 (sample_2D_eDRAM.cell) @16nm", derive: "60 * 2.56e-4"}
+  edram_16nm.technology.v_wdrv:      {src: [assumption], loc: "0: charge-share writes back through the sense amp"}
+  edram_16nm.technology.c_cell:      {src: [assumption], loc: "~10 fF denser 1T1C eDRAM cap (< commodity DRAM)"}
+
+  # --- STT-MRAM (1T1R) ---
+  sttmram_16nm.technology.sense_mode: {src: [nvsim], loc: "current: TMR resistive read"}
+  sttmram_16nm.technology.t_SA0:      {src: [nvmexplorer, destiny], loc: "read 1.3-19 ns; DESTINY 4.83 ns (45 nm)"}
+  sttmram_16nm.technology.i_read:     {src: [assumption], loc: "TMR read current ~4 uA"}
+  sttmram_16nm.technology.v_cell:     {src: [nvmexplorer], loc: "20 F^2 (14-75 F^2, low end) @16nm", derive: "20 * 2.56e-4"}
+  sttmram_16nm.technology.v_sa0:      {src: [memory_model, destiny], loc: "0.26 latch + DESTINY IV converter (50000 F^2)", derive: "0.26 + 50000 * 2.56e-4"}
+  sttmram_16nm.technology.v_wdrv:     {src: [assumption], loc: "STT switching-current write driver ~20 um^3"}
+  sttmram_16nm.technology.v_pass:     {src: [assumption], loc: "HV BL/SL pass gates ~0.3 um^3/col"}
+
+  # --- SOT-MRAM (3-terminal) ---
+  sotmram_16nm.technology.sense_mode: {src: [nvsim], loc: "current: decoupled fast read"}
+  sotmram_16nm.technology.t_SA0:      {src: [nvmexplorer, destiny], loc: "read 1.4-11 ns; DESTINY 3.8 ns (SLC)"}
+  sotmram_16nm.technology.i_read:     {src: [assumption], loc: "read current ~5 uA"}
+  sotmram_16nm.technology.v_cell:     {src: [nvmexplorer], loc: "20 F^2 (single point) @16nm", derive: "20 * 2.56e-4"}
+  sotmram_16nm.technology.v_sa0:      {src: [memory_model, destiny], loc: "0.26 latch + DESTINY IV converter (50000 F^2)", derive: "0.26 + 50000 * 2.56e-4"}
+  sotmram_16nm.technology.v_wdrv:     {src: [assumption], loc: "SOT write-current driver ~20 um^3"}
+  sotmram_16nm.technology.v_pass:     {src: [assumption], loc: "HV BL/SL pass gates ~0.3 um^3/col"}
+
+  # --- ReRAM (1T1R) ---
+  reram_16nm.technology.sense_mode: {src: [ember], loc: "current: 1T1R resistive read"}
+  reram_16nm.technology.t_SA0:      {src: [ember], loc: "latch floor; settling-dominated read (EMBER ~5 ns)"}
+  reram_16nm.technology.i_read:     {src: [assumption], loc: "1T1R access-limited read current ~3 uA"}
+  reram_16nm.technology.t_sw:       {src: [assumption], loc: "1T1R access + bleed-path selector ~0.05 ns"}
+  reram_16nm.technology.v_cell:     {src: [nvmexplorer], loc: "12 F^2 (4-53 F^2, 1T1R access-limited) @16nm", derive: "12 * 2.56e-4"}
+  reram_16nm.technology.v_sa0:      {src: [memory_model, destiny], loc: "0.26 latch + DESTINY IV converter (50000 F^2)", derive: "0.26 + 50000 * 2.56e-4"}
+  reram_16nm.technology.v_wdrv:     {src: [ember], loc: "SET/RESET HV drivers dominate periph (EMBER Fig. 6: ~33%) ~40 um^3"}
+  reram_16nm.technology.v_pass:     {src: [ember], loc: "HV BL/SL pass gates, edge-stacked (EMBER Fig. 6) ~0.5 um^3/col"}
+
+  # --- Crosspoint ReRAM (0T1R / 1D1R) ---
+  reram_xpoint_16nm.problem.L:              {src: [design_choice], loc: "2 layers (4 F^2 cell fills << one layer)"}
+  reram_xpoint_16nm.technology.sense_mode:  {src: [nvsim], loc: "current: crosspoint resistive read"}
+  reram_xpoint_16nm.technology.t_SA0:       {src: [assumption], loc: "latch floor; sneak-path settling carries read time"}
+  reram_xpoint_16nm.technology.i_read:      {src: [lepri2022], loc: "weak crosspoint read current ~2 uA (sneak paths)"}
+  reram_xpoint_16nm.technology.t_sw:        {src: [assumption], loc: "2-terminal selector nonlinearity ~0.1 ns"}
+  reram_xpoint_16nm.technology.v_cell:      {src: [nvsim], loc: "4 F^2 (cross-point 0T1R/1D1R) @16nm", derive: "4 * 2.56e-4"}
+  reram_xpoint_16nm.technology.v_sa0:       {src: [memory_model, destiny], loc: "0.26 latch + DESTINY IV converter (50000 F^2)", derive: "0.26 + 50000 * 2.56e-4"}
+  reram_xpoint_16nm.technology.v_wdrv:      {src: [assumption], loc: "SET/RESET drivers, no per-cell access FET ~15 um^3 (0T1R density win)"}
+  reram_xpoint_16nm.technology.v_wldrv:     {src: [assumption], loc: "0T1R edge current driver, not a CMOS row decoder << SRAM-fit 2.65"}
+
+  # --- PCM (1T1R) ---
+  pcram_16nm.technology.sense_mode: {src: [nvsim], loc: "voltage: high-R cell weak divider signal -> slow settle"}
+  pcram_16nm.technology.t_SA0:      {src: [nvsim], loc: "sense floor; NVSim 65.9 ns @0.12 um total"}
+  pcram_16nm.technology.r_pullup:   {src: [assumption], loc: "high pull-up ~320 kohm for high-R cell"}
+  pcram_16nm.technology.v_cell:     {src: [nvmexplorer], loc: "25 F^2 (25-40 F^2, low end) @16nm", derive: "25 * 2.56e-4"}
+  pcram_16nm.technology.v_sa0:      {src: [destiny], loc: "voltage-sense comparator (high-R weak signal) > SRAM latch ~1.0 um^3"}
+  pcram_16nm.technology.v_wdrv:     {src: [assumption], loc: "PCM melt-current RESET HV drivers ~40 um^3"}
+  pcram_16nm.technology.v_pass:     {src: [assumption], loc: "HV BL/SL pass gates ~0.5 um^3/col"}
+
+  # --- FeFET ---
+  fefet_16nm.technology.sense_mode: {src: [assumption], loc: "voltage: transistor-based read"}
+  fefet_16nm.technology.t_SA0:      {src: [nvmexplorer], loc: "FeRAM read ~14 ns; FeFET faster (transistor sense)"}
+  fefet_16nm.technology.v_cell:     {src: [nvmexplorer], loc: "15 F^2 (FeFET 4-103 F^2) @16nm", derive: "15 * 2.56e-4"}
+
+
+# =====================================================================
+# equations -- keyed by id, referenced from model.py via a `[eq:<id>]` comment.
+# check_provenance.py asserts every [eq:<id>] tag in model.py resolves here AND
+# every entry here is referenced by at least one tag (no orphan derivations).
+# `form` is the symbolic law (documentation only, not evaluated); `loc` is the
+# exact citation locator into the sources.
+# =====================================================================
+equations:
+
+  decode_depth:
+    src: [assumption]
+    form: "t_dec = k_dec * log2(N_WL)"
+    loc: "standard row-decoder depth ~ log2(rows)"
+    desc: "Row-decoder delay scales with address-bit depth."
+
+  wl_develop:
+    src: [assumption]
+    form: "t_WL = k_wire_WL*N_BL^2 + k_cell_WL*N_BL"
+    loc: "BEOL wire self-RC + per-cell gate load"
+    desc: "Wordline develop = distributed wire self-RC (quadratic in columns) + cell/gate load (linear)."
+
+  bl_wire_selfrc:
+    src: [upton2024]
+    form: "a_quad = 1/2 * r_bl * c_bl  [ns/cell^2]"
+    loc: "distributed RC line; Upton 2024 App. A/B wire term"
+    desc: "Distributed bitline wire self-RC, mode-independent (shared across sense modes), quadratic in rows."
+
+  bl_settle_current:
+    src: [upton2024, ember]
+    form: "a_lin = c_bl*n_ut/i_read  [ns/cell] ; f_margin = -ln(1-Delta)"
+    loc: "Upton 2024 App. A Eq. A.9/A.12; EMBER Eq. 1"
+    desc: "Current-mode sense settling: per-row time constant tau_C plus the settling-margin log-bracket."
+
+  bl_settle_voltage:
+    src: [upton2024]
+    form: "a_lin = v_ratio*r_pullup*c_bl  [ns/cell] ; f_margin = -ln(1-Delta)"
+    loc: "Upton 2024 App. B Eq. B.7/B.8"
+    desc: "Voltage-mode sense settling: Elmore tau (pull-up-dominated); single-tau latency (no B.8 dual-edge 2x)."
+
+  bl_settle_charge_share:
+    src: [destiny, cacti3dd, ha2018]
+    form: "a_lin = r_bl*c_cell  [ns/cell] (lumped) + a_quad (distributed wire)"
+    loc: "DESTINY SubArray.cpp:542; CACTI-3DD DRAM convention; Ha 2018 dV"
+    desc: "Passive 1T1C charge-redistribution: lumped series-RC (CACTI-D/DESTINY convention) plus the shared distributed wire self-RC."
+
+  charge_share_signal_collapse:
+    src: [destiny, ha2018]
+    form: "C_cell/(C_cell + c_bl*N_WL) >= margin_sa  =>  N_WL <= C_cell*(1-margin_sa)/(c_bl*margin_sa)"
+    loc: "DESTINY SubArray.cpp:542; Ha 2018 dV = V_BLP/(1+C_BL/C_S)"
+    desc: "Charge-share developed-signal margin caps subarray rows (why DESTINY caps DRAM subarray height); enters as a constant N_WL upper bound, not a develop-time term."
+
+  energy_read_access:
+    src: [destiny, nvsim]
+    form: "E_access = (c_cell + c_bl*N_WL)*V^2*N_BL + e_periph  [fJ] ; V^2 = v_read^2 (full rail) or v_read*v_sense (partial)"
+    loc: "DESTINY SubArray::CalculatePower :685/:687/:699/:702/:714; NVSim E=CV^2"
+    desc: "Per-access CV^2 bitline read energy; k_col = per-bitline cell/access cap, k_arr = distributed BL cap over the activated row; sense mode selects full precharge swing vs partial charge-share develop."
+
+  periph_volume_scaling:
+    src: [ember, memory_model]
+    form: "vol = v_cell*cells + (v_sa0+v_wdrv)*N_SA + (v_pass+v_pre)*bl_edge + v_wldrv*wl_edge + v_sel*sel + v_periph*N_tot"
+    loc: "EMBER Fig. 6 (SA/driver column slot); memory_model per-component fits"
+    desc: "Shared read/write endpoints scale with N_SA (EMBER pairs SA+driver); per-array strips replicate over every array."
+
+  bandwidth_def:
+    src: [assumption]
+    form: "BW * t_cycle = N_SA"
+    loc: "throughput identity"
+    desc: "Bits per cycle (sense amps) delivered over the cycle time."
+
+  cycle_amortization:
+    src: [assumption]
+    form: "t_cycle * N_share >= sum_dev"
+    loc: "subarray-level parallelism (cf. SALP)"
+    desc: "Serial develop latency amortized over N_share arrays sharing one peripheral set."
+
+  energy_per_bit_overfetch:
+    src: [oconnor2017]
+    form: "E_bit = E_access / b_acc"
+    loc: "O'Connor 2017 row-overfetch (b_acc/N_BL lever)"
+    desc: "Whole N_BL row swings but only b_acc bits leave -> access energy amortized over delivered bits."
+
+  power_density:
+    src: [oconnor2017, akgun2016]
+    form: "(P_dyn + p_leak_bit*total_cells)/A_used <= P_max ; P_dyn = BW*E_bit"
+    loc: "O'Connor E_bit=P/BW; Akgun 2016 thermal-density ceiling"
+    desc: "Power-density cap over the shared 3D footprint, tying bandwidth to the cooling budget."

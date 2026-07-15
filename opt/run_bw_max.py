@@ -12,6 +12,7 @@ Examples:
     python opt/run_bw_max.py --all
 """
 import argparse
+import dataclasses
 import math
 import os
 import re
@@ -40,13 +41,14 @@ DEFAULT_GUROBI = Path(
 PARAMS = {
     "problem": ["C", "A", "L", "t_layer", "P_max"],
     "technology": ["k_dec", "k_wire_WL", "k_cell_WL", "t_SA0", "t_restore",
-                   "destructive", "t_sw", "v_cell", "v_sa0", "k_vdec", "v_sel",
+                   "destructive", "t_sw", "v_cell", "v_sa0", "v_wdrv", "v_pass",
+                   "v_pre", "v_wldrv", "v_sel",
                    "v_periph", "sense_mode", "settle_frac", "c_bl", "r_bl",
                    "i_read", "n_ut", "r_pullup", "v_ratio", "c_cell", "margin_sa",
                    "v_read", "v_sense", "e_periph", "e_write_cell", "p_leak_bit",
                    "write_fraction"],
     "bounds": ["NBL_min", "NBL_max", "NWL_min", "NWL_max",
-               "Nshare_min", "Nshare_max", "Nindep_max", "BW_max"],
+               "Nshare_min", "Nshare_max", "Nindep_max"],
 }
 # Params that are NOT numeric (skip float() coercion in make_specs).
 STRING_PARAMS = {"sense_mode"}
@@ -116,19 +118,24 @@ def make_solver(merged: dict, gurobi_asl: Path):
 # works on both. Keep this list == report layout below.
 VALUE_KEYS = ["N_BL", "N_WL", "b_acc", "N_share", "N_indep",
               "t_cycle", "BW", "t_dec", "t_WL", "t_BL", "t_SA", "sum_dev",
-              "cells_arr", "N_tot", "N_SA", "total_cells", "cells_x_indep",
+              "cells_arr", "N_tot", "N_SA", "total_cells", "bl_edge", "wl_edge",
               "sel_term", "E_bit", "P_dyn"]
 
 
 def collect_values(m, problem: ProblemSpec, tech: TechSpec) -> dict:
     """Dict of solved values plus derived report quantities."""
     d = {k: pyo.value(getattr(m, k)) for k in VALUE_KEYS}
-    vol_used = (tech.v_cell * d["total_cells"] + tech.v_sa0 * d["N_SA"]
-                + tech.k_vdec * d["cells_x_indep"] + tech.v_sel * d["sel_term"]
+    vol_used = (tech.v_cell * d["total_cells"]
+                + (tech.v_sa0 + tech.v_wdrv) * d["N_SA"]
+                + (tech.v_pass + tech.v_pre) * d["bl_edge"]
+                + tech.v_wldrv * d["wl_edge"]
+                + tech.v_sel * d["sel_term"]
                 + tech.v_periph * d["N_tot"])
     d["vol_arrays"] = tech.v_cell * d["total_cells"]
     d["vol_sas"] = tech.v_sa0 * d["N_SA"]
-    d["vol_dec"] = tech.k_vdec * d["cells_x_indep"]
+    d["vol_wdrv"] = tech.v_wdrv * d["N_SA"]
+    d["vol_bl"] = (tech.v_pass + tech.v_pre) * d["bl_edge"]
+    d["vol_wl"] = tech.v_wldrv * d["wl_edge"]
     d["vol_sel"] = tech.v_sel * d["sel_term"]
     d["vol_periph"] = tech.v_periph * d["N_tot"]
     d["vol_used"] = vol_used
@@ -156,10 +163,19 @@ def collect_values(m, problem: ProblemSpec, tech: TechSpec) -> dict:
     # model variables show up in the report without touching this function.
     d["all_vars"] = {var.name: pyo.value(var)
                      for var in m.component_data_objects(pyo.Var, active=True)}
+    # Every input parameter (ProblemSpec + TechSpec fields), keyed by name --
+    # future-proof: new spec fields show up in the report automatically.
+    d["problem_inputs"] = dataclasses.asdict(problem)
+    d["tech_inputs"] = dataclasses.asdict(tech)
     # Data-wire connection pitch: N_SA sense amps distributed over the chip
     # footprint A -> each owns A/N_SA area, so adjacent data wires sit sqrt() apart.
     d["conn_pitch"] = math.sqrt(problem.A / d["N_SA"])
     return d
+
+
+def _fmt_param(val):
+    """Format an input-parameter value: numbers with %g, everything else as-is."""
+    return f"{val:.6g}" if isinstance(val, (int, float)) else str(val)
 
 
 def print_report(name: str, v: dict) -> None:
@@ -168,6 +184,18 @@ def print_report(name: str, v: dict) -> None:
     BW is solved in bit/ns; 1 bit/ns = 1.25e8 B/s.
     """
     print("\n================= 3d_memory :: BW-max design point =================")
+    print("  ------------------------------------------------------------------")
+    print("  all input parameters (ProblemSpec):")
+    for name, val in v['problem_inputs'].items():
+        print(f"    {name:<16} = {_fmt_param(val)}")
+    print("  all input parameters (TechSpec):")
+    for name, val in v['tech_inputs'].items():
+        print(f"    {name:<16} = {_fmt_param(val)}")
+    print("  ------------------------------------------------------------------")
+    print("  all model variables (pyo.Var):")
+    for name, val in v['all_vars'].items():
+        print(f"    {name:<16} = {val:.6g}")
+    print("  ------------------------------------------------------------------")
     print(f"  objective  BW        = {v['BW'] * 1.25e8:12.4g}  B/s   ({v['BW'] * 0.125e-3:.4g} TB/s)")
     print(f"  cycle time t_cycle    = {v['t_cycle']:12.4g}  ns")
     print("  ------------------------------------------------------------------")
@@ -183,7 +211,7 @@ def print_report(name: str, v: dict) -> None:
     print(f"  single-array t_cycle  = {v['sum_dev']:12.4g}  ns   (before N_share amortization)")
     print("  ------------------------------------------------------------------")
     print(f"  volume used / budget  = {v['vol_used']:.4g} / {v['vol_budget']:.4g} um^3  ({v['vol_pct']:.1f}%)")
-    print(f"    arrays   = {v['vol_arrays']:.4g}   SAs = {v['vol_sas']:.4g}   dec = {v['vol_dec']:.4g}   sel = {v['vol_sel']:.4g}   periph = {v['vol_periph']:.4g} um^3")
+    print(f"    arrays = {v['vol_arrays']:.4g}   SA = {v['vol_sas']:.4g}   wdrv = {v['vol_wdrv']:.4g}   BL-strip = {v['vol_bl']:.4g}   WL-strip = {v['vol_wl']:.4g}   sel = {v['vol_sel']:.4g}   periph = {v['vol_periph']:.4g} um^3")
     print(f"    n_arrays (N_tot)      = {v['N_tot']:.4g}")
     print(f"  capacity  stored/target = {v['total_cells']:.4g} / {v['C']:.4g} bit")
     print("  ------------------------------------------------------------------")
@@ -198,9 +226,6 @@ def print_report(name: str, v: dict) -> None:
     print("  ------------------------------------------------------------------")
     print(f"  data-wire conn pitch  = {v['conn_pitch']:12.4g}  um    (sqrt(A / N_SA))")
     print("  ------------------------------------------------------------------")
-    print("  all model variables (pyo.Var):")
-    for name, val in v['all_vars'].items():
-        print(f"    {name:<16} = {val:.6g}")
     print("====================================================================")
 
 
@@ -228,13 +253,17 @@ def solve_config(name: str, defaults: dict, configs: dict, gurobi_asl: Path) -> 
     tc = results.solver.termination_condition
     solved = tc in SOLVED and len(results.solution) > 0
     row = {"config": name, "termination": str(tc)}
-    if not solved:
+    if solved:
+        m.solutions.load_from(results)
+    # A limit/maxIterations result on an infeasible-or-unbounded presolve carries
+    # a phantom (empty) solution object -> variables stay uninitialized. Confirm a
+    # real incumbent loaded before reading it.
+    if not solved or m.BW.value is None:
         print(f"  [no incumbent: termination = {tc}]")
         row.update({k: None for k in ("BW", "t_cycle", "N_BL", "N_WL",
                                       "N_share", "vol_pct")})
         return row
 
-    m.solutions.load_from(results)
     v = collect_values(m, problem, tech)
     print_report(name, v)
     row.update({"BW": v["BW"] * 1.25e8, "t_cycle": v["t_cycle"],

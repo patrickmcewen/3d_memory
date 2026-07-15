@@ -60,11 +60,18 @@ class TechSpec:
     t_restore: float   # restore time for a destructive read         [ns]
     destructive: int   # 1 => fold restore into t_SA (DRAM-like)
     t_sw: float        # selector switching time                     [ns]
+    # Peripheral-component volumes (see periph_volume): each named circuit block
+    # is charged against the volume budget with its own physical scaling law.
+    # A block a technology does not have is disabled by setting its coeff to 0
+    # (e.g. charge-share DRAM writes back through the sense amp -> v_wdrv = 0).
     v_cell: float      # volume per stored bit                       [um^3/bit]
-    v_sa0: float       # sense-amp volume (constant per amp)         [um^3]
-    k_vdec: float      # decoder volume per array cell               [um^3/cell]
-    v_sel: float       # selector volume per (extra shared array x sense-amp) [um^3]
-    v_periph: float    # fixed peripheral overhead per array         [um^3/array]
+    v_sa0: float       # sense-amp volume, per sensed bit            [um^3/bit]
+    v_wdrv: float      # write-driver volume, per access bit         [um^3/bit]
+    v_pass: float      # BL/SL pass-gate + column-mux, per column    [um^3/col]
+    v_pre: float       # precharger, per column                      [um^3/col]
+    v_wldrv: float     # WL-driver + row-decoder, per row            [um^3/row]
+    v_sel: float       # inter-array sharing selector, per (extra shared array x sense-amp) [um^3]
+    v_periph: float    # predecode/control/DAC overhead, per array   [um^3/array]
     # ---- sense-settling model (Upton 2024 App. A/B) ----
     sense_mode: str    # 'current' (App. A) | 'voltage' (App. B) | 'charge_share' (DRAM)
     settle_frac: float # Delta: fraction of steady state to settle to (e.g. 0.99)
@@ -94,7 +101,10 @@ class TechSpec:
         assert self.t_sw >= 0, f"t_sw must be >= 0, got {self.t_sw}"
         assert self.v_cell > 0, f"v_cell must be > 0, got {self.v_cell}"
         assert self.v_sa0 > 0, f"v_sa0 must be > 0, got {self.v_sa0}"
-        assert self.k_vdec > 0, f"k_vdec must be > 0, got {self.k_vdec}"
+        assert self.v_wdrv >= 0, f"v_wdrv must be >= 0, got {self.v_wdrv}"   # 0 => no dedicated write driver (charge-share)
+        assert self.v_pass >= 0, f"v_pass must be >= 0, got {self.v_pass}"
+        assert self.v_pre >= 0, f"v_pre must be >= 0, got {self.v_pre}"
+        assert self.v_wldrv >= 0, f"v_wldrv must be >= 0, got {self.v_wldrv}"
         assert self.v_sel > 0, f"v_sel must be > 0, got {self.v_sel}"
         assert self.v_periph >= 0, f"v_periph must be >= 0, got {self.v_periph}"
         assert self.sense_mode in ("current", "voltage", "charge_share"), f"sense_mode must be 'current'|'voltage'|'charge_share', got {self.sense_mode!r}"
@@ -125,7 +135,6 @@ class Bounds:
     Nshare_min: int
     Nshare_max: int
     Nindep_max: float
-    BW_max: float
 
     def __post_init__(self):
         assert 0 < self.NBL_min <= self.NBL_max, f"need 0 < NBL_min <= NBL_max, got {self.NBL_min}, {self.NBL_max}"
@@ -134,7 +143,6 @@ class Bounds:
         self.Nshare_min, self.Nshare_max = int(self.Nshare_min), int(self.Nshare_max)
         assert 0 < self.Nshare_min <= self.Nshare_max, f"need 0 < Nshare_min <= Nshare_max, got {self.Nshare_min}, {self.Nshare_max}"
         assert self.Nindep_max > 0, f"Nindep_max must be > 0, got {self.Nindep_max}"
-        assert self.BW_max > 0, f"BW_max must be > 0, got {self.BW_max}"
 
 
 def develop_coeffs(tech: TechSpec):
@@ -153,9 +161,14 @@ def develop_coeffs(tech: TechSpec):
     Quadratic term = distributed BL wire self-RC ``1/2 * r_bl * c_bl`` (the
     shared wire-stack term, mode-independent to first order). Linear term is the
     per-mode signal-development time constant per row:
-      * current (App. A, Eq. A.12): tau_C = C_BL * n*Ut / I_read, C_BL = c_bl*N
-        -> a_lin = c_bl * n_ut / i_read.  f_margin = -ln(1-Delta) (first-order
-        settle of the current signal to within (1-Delta) of steady state).
+      * current (App. A Eq. A.9 / EMBER Eq. 1): tau_C = C_BL * n*Ut / I_read,
+        C_BL = c_bl*N -> a_lin = c_bl * n_ut / i_read. The margin factor
+        f_margin = -ln(1-Delta) is the App. A Eq. (A.12) settling-time log-bracket
+        K evaluated in the thesis-recommended limit I_bias = I_read: with d' = 1-Delta,
+        K = ln[(1 - I_read/I_D0) * (1+d')/d'] -> ln((1+d')/d') ~= -ln(1-Delta) for
+        I_D0 >> I_read (Delta=0.99: K=ln(101)=4.615 vs -ln(0.01)=4.605, 0.2% apart).
+        The omitted (1 - I_read/I_D0) finite-initial-current term would need an I_D0
+        (initial BL current) param we do not carry, so we use the leading-order factor.
       * voltage (App. B, Eq. B.7): Elmore tau = v_ratio*(R_pullup+R_BL/2)*C_BL;
         pull-up dominates the linear term -> a_lin = v_ratio * r_pullup * c_bl,
         and the divider ratio also scales the wire term. f_margin = -ln(1-Delta).
@@ -183,16 +196,16 @@ def develop_coeffs(tech: TechSpec):
         build_model -- never as a develop-time term.
     """
     d = tech.settle_frac
-    a_quad = 0.5 * tech.r_bl * tech.c_bl * 1e-6          # BL wire self-RC [ns/cell^2]
+    a_quad = 0.5 * tech.r_bl * tech.c_bl * 1e-6          # [eq:bl_wire_selfrc]
     if tech.sense_mode == "current":
-        a_lin = tech.c_bl * tech.n_ut / tech.i_read      # tau_C per row   [ns/cell]
+        a_lin = tech.c_bl * tech.n_ut / tech.i_read      # [eq:bl_settle_current]
         f_margin = -math.log(1.0 - d)
     elif tech.sense_mode == "voltage":
-        a_lin = tech.v_ratio * tech.r_pullup * tech.c_bl * 1e-6   # [ns/cell]
+        a_lin = tech.v_ratio * tech.r_pullup * tech.c_bl * 1e-6   # [eq:bl_settle_voltage]
         a_quad *= tech.v_ratio                            # divider prefactor on wire term
         f_margin = -math.log(1.0 - d)                     # settling latency (no dual-edge 2x; see docstring)
     else:  # 'charge_share' (validated in __post_init__)
-        a_lin = tech.r_bl * tech.c_cell * 1e-6           # lumped charge-redistribution [ns/cell]
+        a_lin = tech.r_bl * tech.c_cell * 1e-6           # [eq:bl_settle_charge_share]
         f_margin = -math.log(1.0 - d)                    # a_quad kept at default: distributed wire self-RC
     return f_margin, a_lin, a_quad
 
@@ -224,8 +237,8 @@ def energy_coeffs(tech: TechSpec):
         v2 = tech.v_read * tech.v_sense                  # partial-swing charge develop
     else:
         v2 = tech.v_read * tech.v_read                   # full-rail swing (or destructive restore)
-    k_col = tech.c_cell * v2                             # per active bitline (cell/access cap) [fJ]
-    k_arr = tech.c_bl * v2                               # distributed BL cap over the row       [fJ/cell]
+    k_col = tech.c_cell * v2                             # [eq:energy_read_access]
+    k_arr = tech.c_bl * v2
     return k_col, k_arr
 
 
@@ -239,16 +252,11 @@ def build_model(problem: ProblemSpec, tech: TechSpec, bounds: Bounds) -> pyo.Con
     m = pyo.ConcreteModel(name="bw_max")
     b = bounds
 
-    # Charge-share (DRAM/eDRAM) signal collapse: the developed signal
-    # C_cell/(C_cell + c_bl*N_WL) must stay above the SA offset margin_sa (this
-    # is why DESTINY caps DRAM subarray rows). Solving the inequality gives a
-    # constant upper bound on the rows, so it enters as a tightened N_WL bound
-    # rather than a develop-time term:
-    #   C_cell/(C_cell + c_bl*N_WL) >= margin_sa
-    #   => N_WL <= C_cell*(1 - margin_sa)/(c_bl*margin_sa)
+    # Charge-share (DRAM/eDRAM) signal collapse enters as a constant N_WL upper
+    # bound (a tightened bound, not a develop-time term); derivation in the ledger.
     nwl_hi = b.NWL_max
     if tech.sense_mode == "charge_share":
-        nwl_sig = tech.c_cell * (1.0 - tech.margin_sa) / (tech.c_bl * tech.margin_sa)
+        nwl_sig = tech.c_cell * (1.0 - tech.margin_sa) / (tech.c_bl * tech.margin_sa)  # [eq:charge_share_signal_collapse]
         assert nwl_sig >= b.NWL_min, (
             f"charge-share signal margin unsatisfiable: N_WL cap {nwl_sig:.1f} "
             f"< NWL_min {b.NWL_min} (raise c_cell, or lower margin_sa/c_bl)")
@@ -261,13 +269,13 @@ def build_model(problem: ProblemSpec, tech: TechSpec, bounds: Bounds) -> pyo.Con
     m.N_share = pyo.Var(domain=pyo.Integers, bounds=(b.Nshare_min, b.Nshare_max))  # arrays sharing one periph set
     m.N_indep = pyo.Var(bounds=(1, b.Nindep_max))         # independent peripheral sets
     m.t_cycle = pyo.Var(bounds=(tech.t_SA0 * 0.5, None))  # steady-state cycle time (lower bound only)
-    m.BW = pyo.Var(bounds=(0, b.BW_max))                  # objective
+    m.BW = pyo.Var(bounds=(0, None))                  # objective
 
     # ---- defined timing terms as Expressions -------------------------------
     # Pure functions of the decision vars (no free variable of their own).
     f_margin, a_lin, a_quad = develop_coeffs(tech)
-    m.t_dec = pyo.Expression(expr=tech.k_dec * pyo.log(m.N_WL) / math.log(2))       # decode depth ~ log2(rows)
-    m.t_WL = pyo.Expression(expr=tech.k_wire_WL * m.N_BL**2 + tech.k_cell_WL * m.N_BL)  # WL: wire self-RC + cell load
+    m.t_dec = pyo.Expression(expr=tech.k_dec * pyo.log(m.N_WL) / math.log(2))       # [eq:decode_depth]
+    m.t_WL = pyo.Expression(expr=tech.k_wire_WL * m.N_BL**2 + tech.k_cell_WL * m.N_BL)  # [eq:wl_develop]
     # BL develop = sense-signal settling (Upton App. A/B): mode-dependent linear
     # term + shared wire self-RC, times the Delta settle factor. Replaces the
     # phase-1 k_wire_BL/k_cell_BL polynomial and the constant read time.
@@ -283,28 +291,47 @@ def build_model(problem: ProblemSpec, tech: TechSpec, bounds: Bounds) -> pyo.Con
     m.N_tot = pyo.Var(bounds=(0, b.Nindep_max * b.Nshare_max))
     m.N_SA = pyo.Var(bounds=(0, b.Nindep_max * b.NBL_max))
     m.total_cells = pyo.Var(bounds=(0, b.NBL_max * b.NWL_max * b.Nindep_max * b.Nshare_max))
-    m.cells_x_indep = pyo.Var(bounds=(0, b.NBL_max * b.NWL_max * b.Nindep_max))
+    m.bl_edge = pyo.Var(bounds=(0, b.NBL_max * b.Nindep_max * b.Nshare_max))   # columns summed over every physical array
+    m.wl_edge = pyo.Var(bounds=(0, b.NWL_max * b.Nindep_max * b.Nshare_max))   # rows summed over every physical array
     m.sel_term = pyo.Var(bounds=(0, (b.Nshare_max - 1) * b.Nindep_max * b.NBL_max))
 
     m.def_cells_arr = pyo.Constraint(expr=m.cells_arr == m.N_BL * m.N_WL)
     m.def_Ntot = pyo.Constraint(expr=m.N_tot == m.N_indep * m.N_share)
     m.def_NSA = pyo.Constraint(expr=m.N_SA == m.N_indep * m.b_acc)          # = N_indep * bits/access
     m.def_total_cells = pyo.Constraint(expr=m.total_cells == m.cells_arr * m.N_tot)
-    m.def_cells_x_indep = pyo.Constraint(expr=m.cells_x_indep == m.cells_arr * m.N_indep)
+    m.def_bl_edge = pyo.Constraint(expr=m.bl_edge == m.N_BL * m.N_tot)      # per-array column strips, replicated over all arrays
+    m.def_wl_edge = pyo.Constraint(expr=m.wl_edge == m.N_WL * m.N_tot)      # per-array row strips, replicated over all arrays
     m.def_sel_term = pyo.Constraint(expr=m.sel_term == (m.N_share - 1) * m.N_SA)  # selectors only for sharing beyond the first array (0 at N_share=1)
 
     # ---- kernel constraints ------------------------------------------------
     m.cyc_dec = pyo.Constraint(expr=m.t_cycle >= m.t_dec)                    # decode floor
     m.cyc_sa = pyo.Constraint(expr=m.t_cycle >= m.t_SA + tech.t_sw)          # latch+switch floor
-    m.cyc_dev = pyo.Constraint(expr=m.t_cycle * m.N_share >= m.sum_dev)      # develop amortized over shared arrays
-    m.bw_def = pyo.Constraint(expr=m.BW * m.t_cycle == m.N_SA)               # BW = N_SA / t_cycle
+    m.cyc_dev = pyo.Constraint(expr=m.t_cycle * m.N_share >= m.sum_dev)      # [eq:cycle_amortization]
+    m.bw_def = pyo.Constraint(expr=m.BW * m.t_cycle == m.N_SA)               # [eq:bandwidth_def]
     m.width_cap = pyo.Constraint(expr=m.b_acc <= m.N_BL)                     # cannot sense more bits than bitlines
     m.capacity = pyo.Constraint(expr=m.total_cells >= problem.C)             # meet target capacity
-    vol_used = (tech.v_cell * m.total_cells                                 # shared by volume + power-density
-                + tech.v_sa0 * m.N_SA                                       # SA volume: constant per amp
-                + tech.k_vdec * m.cells_x_indep
-                + tech.v_sel * m.sel_term
-                + tech.v_periph * m.N_tot)                                  # fixed periphery per array (row dec/WL drivers/edge)
+    # Per-component peripheral volume (shared by the volume + power-density
+    # constraints). Two scaling classes, set by whether a block is time-shared
+    # across the N_share arrays that share one peripheral set:
+    #   * SHARED read/write ENDPOINTS -- sense amp + write driver. Only one array
+    #     is active per cycle (develop amortized in cyc_dev), so a single bank of
+    #     b_acc amps/drivers serves all N_share arrays -> scale with N_SA
+    #     (= N_indep * b_acc), NO N_share factor. EMBER pairs the SA and write
+    #     driver in one column-muxed slot, so both ride N_SA.
+    #   * PER-ARRAY IN-ARRAY STRUCTURES -- BL-side per-column strip (pass gate +
+    #     column mux + precharger) and WL-side per-row strip (WL driver + row
+    #     decoder). Each physical array owns its own rows and columns, so these
+    #     replicate in every array -> scale with bl_edge/wl_edge (carry N_tot).
+    #     (Sharing sense amps commits the arrays to bitline-direction stacking,
+    #     which precludes sharing WL drivers -- see design notes.)
+    #   * v_sel is the distinct INTER-array selector that muxes N_share arrays
+    #     onto the shared endpoints; v_periph is the fixed predecode/control/DAC.
+    vol_used = (tech.v_cell * m.total_cells                                 # cell array  [eq:periph_volume_scaling]
+                + (tech.v_sa0 + tech.v_wdrv) * m.N_SA                       # shared sense-amp + write-driver interface
+                + (tech.v_pass + tech.v_pre) * m.bl_edge                    # BL-side per-column strip, every array
+                + tech.v_wldrv * m.wl_edge                                  # WL-side per-row strip, every array
+                + tech.v_sel * m.sel_term                                   # inter-array sharing selectors
+                + tech.v_periph * m.N_tot)                                  # predecode/control/DAC, fixed per array
     m.volume = pyo.Constraint(expr=vol_used <= problem.vol_budget)          # 3D volume packing budget
 
     # ---- energy / power-density (see energy_coeffs) ------------------------
@@ -325,11 +352,11 @@ def build_model(problem: ProblemSpec, tech: TechSpec, bounds: Bounds) -> pyo.Con
                 + f_w * tech.e_write_cell * b.NBL_max)                       # b_acc >= 1 => E_bit <= E_access_max
     m.E_bit = pyo.Var(bounds=(0, E_bit_ub))                                  # [fJ/bit]
     m.P_dyn = pyo.Var(bounds=(0, problem.P_max * problem.A))                 # [uW]; <= P_max * footprint
-    m.def_E_bit = pyo.Constraint(expr=m.E_bit * m.b_acc == m.E_access)      # E_bit = E_access / b_acc
+    m.def_E_bit = pyo.Constraint(expr=m.E_bit * m.b_acc == m.E_access)      # [eq:energy_per_bit_overfetch]
     m.def_P_dyn = pyo.Constraint(expr=m.P_dyn == m.BW * m.E_bit)            # dynamic power [uW] (BW in bit/ns, E in fJ)
     m.power_density = pyo.Constraint(
         expr=m.P_dyn + tech.p_leak_bit * m.total_cells
-        <= (problem.P_max / (problem.L * problem.t_layer)) * vol_used)
+        <= (problem.P_max / (problem.L * problem.t_layer)) * vol_used)     # [eq:power_density]
 
     # ---- objective ---------------------------------------------------------
     m.bandwidth = pyo.Objective(expr=m.BW, sense=pyo.maximize)

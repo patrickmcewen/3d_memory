@@ -26,42 +26,80 @@
 \newcommand{\Voldec}{\mathrm{Vol}_{\mathrm{dec}}}
 \newcommand{\Volsel}{\mathrm{Vol}_{\mathrm{sel}}}
 \newcommand{\bacc}{b_{\mathrm{acc}}}
+\newcommand{\Volper}{\mathrm{Vol}_{\mathrm{per}}}
+\newcommand{\Eacc}{E_{\mathrm{acc}}}
+\newcommand{\Ebit}{E_{\mathrm{bit}}}
+\newcommand{\Pdyn}{P_{\mathrm{dyn}}}
+\newcommand{\Pmax}{P_{\max}}
+\newcommand{\Aused}{A_{\mathrm{u}}}
+\newcommand{\Ncell}{N_{\mathrm{cell}}}
 
 \begin{document}
 
-\begin{frame}{Macro-level bandwidth model for monolithic 3D memory}
+% ==== Frame 1: consolidated terms =========================================
+\begin{frame}{Macro-level 3D memory model --- terms}
 \footnotesize
 
 \begin{columns}[T]
 
-% ---- LEFT: Terms --------------------------------------------------
-\begin{column}{0.42\textwidth}
-\begin{block}{Terms}
-\scriptsize
-\begin{tabular}{@{}l @{\ \ } l@{}}
+% ---- LEFT: geometry / timing / volume -----------------------------------
+\begin{column}{0.5\textwidth}
+\begin{tabular}{@{}l @{\ \ } p{0.60\columnwidth}@{}}
 \toprule
+\multicolumn{2}{@{}l}{\textbf{Geometry \& counts}} \\
 $C,A,L$        & capacity, footprint/layer, layers \\
-$\Delta T_{\max}$ & peak $\Delta T$ (thermal governor) \\
+$t_{\mathrm{layer}}$ & physical thickness per layer \\
+$\Pmax$        & power-density budget (cooling) \\
 $\Nindep$      & indep.\ peripheral sets \\
 $\Nshare$      & arrays sharing sense amps \\
-$\Ntot$        & $=\Nindep\!\cdot\!\Nshare$ \\
+$\Ntot$        & total arrays $=\Nindep\Nshare$ \\
 $\Nsa,\Ndec$   & \# sense amps, \# decoders \\
 $\bacc$        & bits per access (sense width) \\
 $\Nbl,\Nwl$    & bitlines, wordlines / array \\
+$\Ncell$       & total cells $=\Nbl\Nwl\Ntot$ \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{Timing \& volume}} \\
 $\tcyc$        & steady-state cycle time \\
-$\tdec,\twl,\tbl$ & decode (max stage latency), \\ & wordline, BL-develop \\
-$\tsa$         & sense (\emph{incl.\ restore}) \\
-$\tsw$         & selector switching \\
+$\tdec,\twl,\tbl$ & decode, wordline, BL-develop \\
+$\tsa,\tsw$    & sense (incl.\ restore), selector switch \\
 $\Volarr,\Volsa$ & array, sense-amp volume \\
-$\Voldec,\Volsel$ & decoder, selector volume \\
+$\Voldec,\Volsel,\Volper$ & decoder, selector, periph.\ vol. \\
 \bottomrule
 \end{tabular}
-\end{block}
 \end{column}
 
-% ---- RIGHT: the kernel ---------------------------------------------------
-\begin{column}{0.58\textwidth}
-\begin{block}{Cycle time}
+% ---- RIGHT: sensing / energy --------------------------------------------
+\begin{column}{0.5\textwidth}
+\begin{tabular}{@{}l @{\ \ } p{0.60\columnwidth}@{}}
+\toprule
+\multicolumn{2}{@{}l}{\textbf{Sensing (Upton App.\ A/B)}} \\
+$\Delta,f_\Delta$   & settle fraction; factor $-\ln(1{-}\Delta)$ \\
+$a_{\mathrm{lin}},a_{\mathrm{quad}}$ & BL develop lin.; wire self-RC \\
+$r_{BL},c_{BL}$     & BL resistance, cap per cell \\
+$C_{\mathrm{cell}}$ & storage cap per cell \\
+$nU_t,I_{\mathrm{read}}$ & subthreshold; read $I$ (current) \\
+$v_{\mathrm{ratio}},R_{\text{p-up}}$ & divider; pull-up R (voltage) \\
+$m_{\mathrm{SA}}$   & SA offset margin (charge-share) \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{Energy \& power}} \\
+$k_{\mathrm{col}},k_{\mathrm{arr}}$ & energy coeffs $C_{\mathrm{cell}}V^2,\,c_{BL}V^2$ \\
+$V$                 & sense/precharge swing \\
+$e_{\mathrm{periph}},e_{\mathrm{write}}$ & periph., per-cell write energy \\
+$f_w,p_{\mathrm{leak}}$ & write fraction; leakage/bit \\
+$\Eacc,\Ebit$       & per-access, per-bit energy \\
+$\Pdyn,\Aused$      & dyn.\ power; occupied footprint \\
+\bottomrule
+\end{tabular}
+\end{column}
+
+\end{columns}
+\end{frame}
+
+% ==== Frame 2: cycle time, bandwidth, packing =============================
+\begin{frame}{Cycle time, bandwidth, and packing}
+\footnotesize
+
+\begin{block}{Cycle time (throughput bound)}
 \[
   \tcyc = \max\!\Big(
     \tdec,\; \tsa+\tsw,\;
@@ -70,32 +108,65 @@ $\Voldec,\Volsel$ & decoder, selector volume \\
 \]
 \end{block}
 
-\vspace{-1.0ex}
 \begin{block}{Bandwidth}
 \[
   \boxed{\;\mathrm{BW} = \dfrac{\bacc}{\tcyc}\,\Nindep\;}
-  \qquad \bacc \le \Nbl
+  \qquad \bacc \le \Nbl \quad\text{\scriptsize(whole-row-activate limit)}
 \]
 \end{block}
 
-\vspace{-1.0ex}
-\begin{block}{Counts, volume, scaling}
+\begin{block}{Counts \& volume (packing equality)}
 \vspace{-1.0ex}
 \begin{align*}
-  \Ntot &= \Nindep\Nshare, \quad
-  \Nsa = \Nindep\,\bacc, \quad
-  \Ndec = \Nindep \\[0.3ex]
-  \mathrm{Vol} &= \Volarr\Ntot + \Volsa\Nsa
-                 + \Voldec\Ndec + \Volsel(\Nshare) \\[0.3ex]
-  \Voldec &\propto \Nwl\Nbl \propto \Volarr, \quad
-  \Volsa \propto \tfrac{1}{\mathrm{margin}^2} \\[0.3ex]
-  \twl &= k^{\mathrm{w}}_{WL}\Nbl^2 + k^{\mathrm{c}}_{WL}\Nbl \quad\text{\scriptsize(wire self-RC + cell load)} \\[0.2ex]
-  \tbl &= k^{\mathrm{w}}_{BL}\Nwl^2 + k^{\mathrm{c}}_{BL}\Nwl \quad\text{\scriptsize($k^{\mathrm{w}}$ shared, $k^{\mathrm{c}}$ per-tech)}
+  \Ntot &= \Nindep\Nshare, \qquad
+  \Nsa = \Nindep\,\bacc, \qquad
+  \Ndec = \Nindep \\[0.4ex]
+  \mathrm{Vol} &= \Volarr\Ntot + \Volsa\Nsa + \Voldec\Ndec
+                 + \Volsel(\Nshare) + \Volper\Ntot
+                 \;\le\; A\,L\,t_{\mathrm{layer}}
 \end{align*}
 \end{block}
 
-\end{column}
-\end{columns}
+\end{frame}
+
+% ==== Frame 3: scaling laws, sensing, energy ==============================
+\begin{frame}{Scaling laws, sensing, and power density}
+\footnotesize
+
+\begin{block}{Timing scaling ($\twl$ wire/cell; $\tbl$ sense-signal settling, Upton 2024)}
+\vspace{-1.0ex}
+\begin{align*}
+  \twl &= k^{\mathrm{w}}_{WL}\Nbl^2 + k^{\mathrm{c}}_{WL}\Nbl
+        \qquad\text{\scriptsize(WL wire self-RC + cell/gate load)} \\[0.2ex]
+  \tbl &= f_\Delta\big(a_{\mathrm{lin}}\Nwl + a_{\mathrm{quad}}\Nwl^2\big),
+        \quad f_\Delta = -\ln(1-\Delta),
+        \quad a_{\mathrm{quad}} = \tfrac12 r_{BL}c_{BL}
+\end{align*}
+\vspace{-1.8ex}
+\begin{center}\scriptsize
+\begin{tabular}{@{}l l l@{}}
+\toprule
+mode & $a_{\mathrm{lin}}$ (signal develop) & note \\
+\midrule
+current (App.\ A) & $c_{BL}\,nU_t/I_{\mathrm{read}}$ & \\
+voltage (App.\ B) & $v_{\mathrm{ratio}}R_{\text{pull-up}}c_{BL}$ & $v_{\mathrm{ratio}}$ also scales $a_{\mathrm{quad}}$ \\
+charge-share (DRAM) & $r_{BL}C_{\mathrm{cell}}$ & row cap $\Nwl\!\le\!\tfrac{C_{\mathrm{cell}}(1-m_{\mathrm{SA}})}{c_{BL}m_{\mathrm{SA}}}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{block}
+
+\vspace{-1.6ex}
+\begin{block}{Energy \& power density (per-access $CV^2$, DESTINY)}
+\vspace{-1.0ex}
+\begin{align*}
+  \Eacc &= k_{\mathrm{col}}\Nbl + k_{\mathrm{arr}}\Nbl\Nwl + e_{\mathrm{periph}} + f_w e_{\mathrm{write}}\bacc,
+        \quad k_{\mathrm{col}}=C_{\mathrm{cell}}V^2,\; k_{\mathrm{arr}}=c_{BL}V^2 \\[0.3ex]
+  \Ebit &= \Eacc/\bacc, \qquad \Pdyn = \mathrm{BW}\cdot\Ebit, \qquad
+        \Aused = \mathrm{Vol}/(L\,t_{\mathrm{layer}}) \\[0.3ex]
+  &\boxed{\;\big(\Pdyn + p_{\mathrm{leak}}\Ncell\big)\big/\Aused \le \Pmax\;}
+\end{align*}
+\end{block}
 
 \end{frame}
 

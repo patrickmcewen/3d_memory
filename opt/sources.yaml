@@ -1,0 +1,102 @@
+# 3d_memory :: canonical source bibliography.
+#
+# One entry per source that any config value or model equation is derived from.
+# `provenance.yaml` and the model.py / docs citations reference these IDs, so a
+# citation is fixed in exactly ONE place here. `local` paths are relative to the
+# `memory/` project root (../ from opt/). Run
+#   python opt/check_provenance.py --by-source <id>
+# to list every config value that depends on a given source.
+#
+# Two pseudo-sources make coverage honest rather than silently absent:
+#   design_choice -- a deliberate study parameter (target capacity, footprint,
+#                    layer budget, sweep variants); not from the literature.
+#   assumption    -- a modeling assumption/placeholder not yet literature-anchored
+#                    (grep these to see what still needs a real citation).
+
+# ---- circuit/architecture modeling tools ----
+nvmexplorer:
+  cite: "Pentecost et al., NVMExplorer: Cross-Stack Comparisons of Embedded NVMs, HPCA 2022"
+  local: "literature/tools/Pentecost et al. - 2022 - NVMExplorer Cross-Stack Comparisons of Embedded NVMs.pdf"
+  note: "Table I: per-technology cell area (F^2), read/write latency (ns), energy (pJ/bit)."
+nvsim:
+  cite: "Dong et al., NVSim: A Circuit-Level Performance/Energy/Area Model for Emerging NVM, TCAD 2012"
+  local: "literature/tools/Xiangyu Dong et al. - 2012 - NVSim A Circuit-Level Performance, Energy, and Area Model for Emerging Nonvolatile Memory.pdf"
+  note: "Validation Tables IV/V/VII/VIII; crosspoint 0T1R/1D1R cell sizes; Joule write E=I^2 R t."
+destiny:
+  cite: "Mittal et al., DESTINY: A Comprehensive Tool with 3D and MLC Memory Modeling, JLPEA 2017"
+  local: "literature/tools/Mittal et al. - 2017 - DESTINY A Comprehensive Tool with 3D and Multi-Level Cell Memory Modeling Capability.pdf"
+  note: "Sample cell files (config/*.cell); SubArray sense/power model. Source read: destiny_3d_cache/SubArray.cpp, constant.h."
+cacti6:
+  cite: "Muralimanohar et al., CACTI 6.0: A Tool to Model Large Caches, HP Labs TR"
+  local: "literature/tools/Muralimanohar et al. - CACTI 6.0 A Tool to Model Large Caches.pdf"
+cacti3dd:
+  cite: "Chen et al., CACTI-3DD: Architecture-level modeling for 3D die-stacked DRAM, DATE 2012"
+  local: "literature/tools/Chen et al. - 2012 - CACTI-3DD Architecture-level modeling for 3D die-stacked DRAM.pdf"
+dreamram:
+  cite: "Cai et al., DreamRAM: A Fine-Grained Configurable DSE Tool for Custom 3D Die-Stacked DRAM, 2026"
+  local: "literature/tools/Cai et al. - 2026 - DreamRAM A Fine-Grained Configurable Design Space Modeling Tool for Custom 3D Die-Stacked DRAM.pdf"
+
+# ---- sensing / settling physics ----
+upton2024:
+  cite: "Upton, sense-amplifier settling-time analysis (PhD thesis), 2024"
+  local: null   # TODO: add thesis PDF path; App. A = current-mode, App. B = voltage-mode settling
+  note: "App. A Eq. A.9/A.12 (current-mode tau_C, settling log-bracket); App. B Eq. B.7/B.8 (voltage-mode Elmore tau)."
+ember:
+  cite: "Upton et al., EMBER: A 100 MHz Multiple-Bits-per-Cell RRAM Macro in 40 nm CMOS, ESSCIRC 2023"
+  local: "literature/sensing/Upton et al. - 2023 - EMBER A 100 MHz, 0.86 mm2 , Multiple-Bits-per-Cell RRAM Macro in 40 nm CMOS with Compact.pdf"
+  note: "RRAM 1T1R read (Eq. 1 read time-constant); Fig. 6 periphery area split (BL/SL drivers+muxes ~33%)."
+pelgrom1989:
+  cite: "Pelgrom et al., Matching Properties of MOS Transistors, JSSC 1989"
+  local: "literature/sensing/Pelgrom et al. - 1989 - Matching Properties of MOS Transistors.pdf"
+  note: "Phase-1 sense-margin/offset area law (superseded by the Upton settling model in phase 2)."
+razavi_strongarm:
+  cite: "Razavi, The StrongARM Latch (A Circuit for All Seasons), SSC-M 2015"
+  local: "literature/sensing/Razavi - 2015 - The StrongARM Latch (A Circuit for All Seasons).pdf"
+
+# ---- DRAM energy / organization ----
+ha2018:
+  cite: "Ha, Understanding and Improving the Energy Efficiency of DRAM (PhD thesis), 2018"
+  local: "literature/dram/Ha - 2018 - Understanding and Improving the Energy Efficiency of DRAM.pdf"
+  note: "BLSA dominates DRAM energy (row 47%, refresh 68%); charge-share dV = V_BLP/(1+C_BL/C_S); refresh Arrhenius."
+oconnor2017:
+  cite: "O'Connor et al., Fine-Grained DRAM: Energy-Efficient DRAM for Extreme Bandwidth Systems, MICRO 2017"
+  local: "literature/dram/OConnor et al. - 2017 - Fine-Grained DRAM Energy-Efficient DRAM for Extreme Bandwidth Systems.pdf"
+  note: "E_bit = P_budget/BW formulation; row-overfetch b_acc/N_BL lever. Anchors: GDDR5 14, HBM2 3.9, FGDRAM ~2 pJ/bit."
+jedec_dram:
+  cite: "JEDEC DDR/commodity-DRAM design targets (industry reference)"
+  local: null
+  note: "~25 fF 1T1C storage-cap design target."
+
+# ---- 3D integration / thermal / PDN ----
+pan2025_stratum:
+  cite: "Pan et al., Stratum: System-Hardware Co-Design with Tiered Monolithic 3D-Stackable DRAM, 2025"
+  local: "literature/3d-memory/Pan et al. - 2025 - Stratum System-Hardware Co-Design with Tiered Monolithic 3D-Stackable DRAM.pdf"
+  note: "Sec. 4.3 power-via area model A_PD = (P/Vdd)(A_TSV/I_TSV) redundancy; 36 mA/25 um^2 via, 2:1 redundancy; 200 W/cm^2 ceiling."
+li2026_atlas:
+  cite: "Li et al., ATLAS: Full-Stack Performance Evaluation Infra for 3D-DRAM-based LLM Accelerators, 2026"
+  local: "literature/3d-memory/Li et al. - 2026 - ATLAS Full-Stack Performance Evaluation Infrastructure for 3D-DRAM-based LLM Accelerators.pdf"
+akgun2016:
+  cite: "Akgun et al., Cost and Thermal Analysis of 2.5D and 3D, 2016"
+  local: "literature/3d-integration/Akgun et al. - 2016 - Cost and Thermal Analysis of 2.5D and 3D.pdf"
+  note: "P_max / thermal-density anchor for the cooling budget."
+lee2025_thermal:
+  cite: "Lee et al., Thermal Issues Related to Hybrid Bonding of 3D-Stacked HBM (Review), 2025"
+  local: "literature/3d-integration/Lee et al. - 2025 - Thermal Issues Related to Hybrid Bonding of 3D-Stacked HBM Review.pdf"
+lepri2022:
+  cite: "Lepri et al., Modeling and Compensation of IR Drop in Crosspoint Accelerators, 2022"
+  local: "literature/sensing/Lepri et al. - 2022 - Modeling and Compensation of IR Drop in Crosspoint Accelerators of Neural Networks.pdf"
+  note: "IR-drop-limited crosspoint subarray size (caps 0T1R N_BL/N_WL)."
+
+# ---- in-house calibration ----
+memory_model:
+  cite: "In-house memory_model subarray tool (SRAM_GEN size sweep), calibrated 2026-07-14"
+  local: "memory_model/"
+  note: "Peripheral-volume slope/intercept fit normalized to F^2 then to 16 nm volume (scratch fit_periph.py). See MEMORY.md :: memory-model-genfet-only."
+
+# ---- pseudo-sources (keep coverage honest; not real citations) ----
+design_choice:
+  cite: "Deliberate study parameter (not a literature value)."
+  local: null
+assumption:
+  cite: "Modeling assumption / placeholder -- not yet literature-anchored. Grep me."
+  local: null

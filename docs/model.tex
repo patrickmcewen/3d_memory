@@ -30,6 +30,14 @@
 \newcommand{\Lper}{L_{\mathrm{periph}}}
 \newcommand{\Asa}{A_{\mathrm{SA}}}
 \newcommand{\acell}{a_{\mathrm{cell}}}
+\newcommand{\Volper}{\mathrm{Vol}_{\mathrm{periph}}}
+\newcommand{\Eacc}{E_{\mathrm{access}}}
+\newcommand{\Ebit}{E_{\mathrm{bit}}}
+\newcommand{\Pdyn}{P_{\mathrm{dyn}}}
+\newcommand{\Pmax}{P_{\max}}
+\newcommand{\Aused}{A_{\mathrm{used}}}
+\newcommand{\tlayer}{t_{\mathrm{layer}}}
+\newcommand{\Ncell}{N_{\mathrm{cell,tot}}}
 
 \title{A Macro-Level Bandwidth Model for Monolithic 3D Memory}
 \author{3d\_memory \, --- design-space exploration tool}
@@ -42,13 +50,16 @@
 We give the analytical kernel behind \texttt{3d\_memory}, a macro-level
 design-space-exploration tool for monolithic 3D memories at the
 CACTI/DESTINY/NVSim altitude. Given a fixed storage capacity $C$, a fixed
-footprint $A$, a fixed layer budget $L$, and a peak-temperature constraint
-$\Delta T_{\max}$, the tool searches 3D organizations that
-\emph{maximize the internal array-supply bandwidth}. The central object is a
+footprint $A$, a fixed layer budget $L$ (each tier of physical thickness
+$\tlayer$), and a peak power-density budget $\Pmax$ (a cooling limit set by an
+external thermal stub), the tool searches 3D organizations that
+\emph{maximize the internal array-supply bandwidth}. The central objects are a
 throughput-bound cycle time, a bandwidth identity linear in the number of
-independent peripheral sets, and a volume-packing constraint that ties
-capacity, cell density, and the layer partition together. Routing, PDN, and the
-thermal boundary condition are deferred (Sec.~\ref{sec:scope}).
+independent peripheral sets, a volume-packing constraint that ties capacity,
+cell density, and the layer partition together, and a per-access energy model
+whose product with bandwidth is capped by $\Pmax$. Routing, the power-delivery
+network, and the thermal boundary condition that produces $\Pmax$ are deferred
+(Sec.~\ref{sec:scope}).
 \end{abstract}
 
 \section{Problem statement}
@@ -56,7 +67,9 @@ thermal boundary condition are deferred (Sec.~\ref{sec:scope}).
 
 \begin{quote}
 \emph{Given} a fixed capacity $C$, a fixed footprint $A$, a fixed number of
-monolithic tiers $L$, and a peak-temperature budget $\Delta T_{\max}$;
+monolithic tiers $L$ (each of physical thickness $\tlayer$), and a peak
+power-density budget $\Pmax$ (a cooling limit; the thermal stub of
+Sec.~\ref{sec:scope} maps $\Delta T_{\max}$ onto it);
 \emph{find} the 3D memory organization (array geometry, degree of peripheral
 sharing, sense-amp stacking, and tier assignment of circuit classes) that
 \emph{maximizes} the internal array-supply bandwidth $\mathrm{BW}$.
@@ -80,7 +93,9 @@ Two named 3D levers act on this objective:
 Symbol & Meaning \\
 \midrule
 $C,\;A,\;L$        & storage capacity, footprint (area/layer), layer budget \\
-$\Delta T_{\max}$  & peak temperature rise allowed (thermal governor) \\
+$\tlayer$          & physical thickness per tier (so $\mathrm{VolBudget}=A\,L\,\tlayer$) \\
+$\Delta T_{\max}$  & peak temperature rise allowed (thermal governor, feeds $\Pmax$) \\
+$\Pmax$            & peak power-density budget [$\mathrm{W/mm^2}$] (cooling limit) \\
 $\acell$           & areal footprint of one stored bit (cell density$^{-1}$) \\
 $\Nindep$          & number of \emph{independent} peripheral sets (arrays or blocks of shared arrays) \\
 $\Nshare$          & number of arrays time-multiplexed onto one shared peripheral set \\
@@ -91,12 +106,17 @@ $\Nbl,\;\Nwl$      & bitlines, wordlines per array \\
 $\tcyc$            & steady-state cycle time (throughput bound) \\
 $\tdec,\twl,\tbl,\tsa$ & decode, wordline, bitline-develop, and sense (incl.\ restore) times \\
 $\tsw$             & selector switching time for time-muxing shared arrays \\
-$\Volarr,\Volsa,\Voldec,\Volsel$ & volumes of one array, sense amp, decoder, selector network \\
+$\Volarr,\Volsa,\Voldec$ & volumes of one array, sense amp, decoder \\
+$\Volsel,\Volper$  & volumes of selector network, fixed periphery per array \\
 $\Larr,\Lper$      & layers holding bits vs.\ layers holding periphery \\
 $\Asa$             & footprint of one sense amp (constant) \\
 $K$                & column-multiplexing degree \\
 $w_{\mathrm{SA}},\,p_{\mathrm{BL}}$ & sense-amp pitch, bitline pitch \\
 $u$                & areal utilization of a peripheral tier \\
+$\Eacc,\Ebit$      & per-access energy, per-delivered-bit energy \\
+$\Pdyn$            & dynamic power ($=\mathrm{BW}\cdot\Ebit$) \\
+$\Aused$           & footprint the packed volume actually occupies \\
+$\Ncell$           & total stored cells $=\Nbl\Nwl\Ntot$ \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -154,12 +174,49 @@ bound, so that no volume goes unaccounted:
     \Volarr\cdot\Ntot \;+\;
     \Volsa\cdot\Nsa   \;+\;
     \Voldec\cdot\Ndec \;+\;
-    \Volsel(\Nshare).
+    \Volsel(\Nshare) \;+\;
+    \Volper\cdot\Ntot .
   \label{eq:vol}
 \end{equation}
 The selector term $\Volsel(\Nshare)$ is the volume of the network that
 time-multiplexes $\Nshare$ arrays onto one shared peripheral set; it grows with
-the sharing degree and is what makes sharing cost area, not just time.
+the sharing degree (concretely $\Volsel\propto(\Nshare-1)\,\Nsa$, so it
+vanishes at $\Nshare=1$) and is what makes sharing cost area, not just time. The
+final term $\Volper\cdot\Ntot$ is a fixed per-array peripheral overhead (row
+decoders, wordline drivers, array edge). This same polynomial is reused as the
+occupied footprint $\Aused=\mathrm{Vol}/(L\,\tlayer)$ in the power-density
+constraint below.
+
+\subsection{Energy and power density}
+Each single-array read activates a whole $\Nbl$-wide row but delivers only
+$\bacc$ bits (O'Connor row overfetch). The per-access dynamic energy is a
+uniform $CV^2$ form plus fixed periphery and an optional write term:
+\begin{equation}
+  \Eacc \;=\; k_{\mathrm{col}}\,\Nbl \;+\; k_{\mathrm{arr}}\,\Nbl\Nwl
+         \;+\; e_{\mathrm{periph}} \;+\; f_w\,e_{\mathrm{write}}\,\bacc,
+  \label{eq:eacc}
+\end{equation}
+with $k_{\mathrm{col}}=C_{\mathrm{cell}}V^2$ (the per-bitline cell/access cap)
+and $k_{\mathrm{arr}}=c_{BL}V^2$ (the activated row's distributed bitline cap,
+growing with rows). The swing is $V^2=V_{\mathrm{read}}^2$ for full-rail modes
+(SRAM latch, resistive-read precharge, and destructive charge-share write-back);
+the partial product $V_{\mathrm{read}}V_{\mathrm{sense}}$ applies only to a
+hypothetical \emph{non-destructive} charge read. Amortizing over the delivered
+bits and multiplying by bandwidth gives the dynamic power, which together with a
+flat per-bit leakage/refresh term is held under the cooling budget as a
+\emph{power density}:
+\begin{align}
+  \Ebit &= \frac{\Eacc}{\bacc}, &
+  \Pdyn &= \mathrm{BW}\cdot\Ebit, &
+  \frac{\Pdyn + p_{\mathrm{leak}}\,\Ncell}{\Aused} &\le \Pmax,
+  \label{eq:power}
+\end{align}
+with $\Aused=\mathrm{Vol}/(L\,\tlayer)$ from \eqref{eq:vol}. In the solver the
+density constraint is written division-free (moving $\Aused$, itself the volume
+polynomial, to the right-hand side) so it stays polynomial for the spatial
+branch-and-bound. Because the footprint reuses the packed volume, energy,
+volume, and geometry are coupled through one expression; $\Pmax$ is supplied by
+the external thermal stub of Sec.~\ref{sec:scope}.
 
 \subsection{Scaling laws}
 \begin{align}
@@ -175,24 +232,43 @@ $\Nbl$ cells along the line; coefficient $k^{\mathrm{wire}}_{WL}=\tfrac12 rc$
 set by the BEOL stack, \emph{shared} across cell technologies) plus a linear
 gate-loading term $k^{\mathrm{cell}}_{WL}$ (\emph{per technology}).
 
-The bitline develop $\tbl$ is now the \textbf{sense-signal settling time},
-derived per sensing mode from Upton (2024) (current-based readout,
-App.~A; steady-state voltage sensing, App.~B). Both modes reduce to one
-polynomial in the $\Nwl$ cells on the bitline: a linear \emph{signal-development}
-term plus the shared quadratic BL wire self-RC $a_{\mathrm{quad}}=\tfrac12
-r_{BL}c_{BL}$, all scaled by a settling factor $f_\Delta$ that carries the
-sensing margin as a \emph{time} cost. For current sensing the development time
-constant is $\tau_C = C_{BL}\,nU_t/I_{\mathrm{read}}$ (Eq.~A.12), giving
-$a_{\mathrm{lin}}=c_{BL}\,nU_t/I_{\mathrm{read}}$ and $f_\Delta=-\ln(1-\Delta)$;
-for voltage sensing the Elmore constant $\tau=\tfrac{V_{BL}}{V_{\mathrm{read}}}
-(R_{\text{pull-up}}+R_{BL}/2)C_{BL}$ (Eq.~B.7) gives a pull-up-dominated
-$a_{\mathrm{lin}}=v_{\mathrm{ratio}}R_{\text{pull-up}}c_{BL}$ and, from the
-synchronous bound $T_{\mathrm{clk}}\ge-2\tau\ln(1-\Delta)$ (Eq.~B.8),
-$f_\Delta=-2\ln(1-\Delta)$. The settling fraction $\Delta$ (e.g.\ $0.99$) is a
-fixed reliability requirement, not a free variable; tightening it (Eq.~B.8)
-costs time logarithmically. $\tsa$ retains the intrinsic device read/latch floor
-(and restore, for destructive cells). Decoder volume tracks the array it drives;
-sense-amp volume is a fixed footprint per amp --- the earlier Pelgrom area law
+The bitline develop $\tbl$ is the \textbf{sense-signal settling time}, derived
+per sensing mode from Upton (2024) (current-mode readout, App.~A; voltage-mode
+readout, App.~B), with a charge-sharing branch for destructive DRAM/eDRAM cells.
+All three reduce to the same polynomial in the $\Nwl$ cells on the bitline: a
+linear \emph{signal-development} term $a_{\mathrm{lin}}$ plus a quadratic BL wire
+self-RC term $a_{\mathrm{quad}}=\tfrac12 r_{BL}c_{BL}$, scaled by a settling
+factor $f_\Delta=-\ln(1-\Delta)$ that carries the sensing margin as a \emph{time}
+cost. The settling fraction $\Delta$ (e.g.\ $0.99$) is a fixed reliability
+requirement, not a free variable; tightening it costs time only
+logarithmically. The linear term is mode-specific:
+\begin{itemize}[nosep]
+  \item \textbf{current} (App.~A, Eq.~A.12): development time constant
+        $\tau_C=C_{BL}\,nU_t/I_{\mathrm{read}}$, so
+        $a_{\mathrm{lin}}=c_{BL}\,nU_t/I_{\mathrm{read}}$.
+  \item \textbf{voltage} (App.~B, Eq.~B.7): Elmore constant
+        $\tau=v_{\mathrm{ratio}}(R_{\text{pull-up}}+R_{BL}/2)C_{BL}$,
+        pull-up-dominated, giving
+        $a_{\mathrm{lin}}=v_{\mathrm{ratio}}R_{\text{pull-up}}c_{BL}$; the same
+        divider ratio $v_{\mathrm{ratio}}=V_{BL,\mathrm{cell}}/V_{\mathrm{read}}$
+        also multiplies the wire term $a_{\mathrm{quad}}$. We use the single-$\tau$
+        settling latency $f_\Delta=-\ln(1-\Delta)$, \emph{not} the dual-edge
+        clock-period bound $T_{\mathrm{clk}}\ge-2\tau\ln(1-\Delta)$ of Eq.~B.8
+        --- the $2\times$ is a half-cycle convention on the clock \emph{period},
+        not on the serial develop latency, and dropping it keeps the shared wire
+        term consistent across modes.
+  \item \textbf{charge\_share} (DRAM/eDRAM, DESTINY convention): passive charge
+        redistribution with a lumped series-RC
+        $a_{\mathrm{lin}}=r_{BL}C_{\mathrm{cell}}$ (CACTI-D / CACTI-5.1) plus the
+        same distributed wire self-RC $a_{\mathrm{quad}}$, which overtakes the
+        lumped term once $\Nwl\gtrsim 2C_{\mathrm{cell}}/c_{BL}$ --- the long,
+        thin, resistive 3D-BEOL bitline regime this tool targets. The
+        series-cap ratio governs signal \emph{amplitude}, not speed, so it
+        enters only as the row cap of Sec.~\ref{sec:derived}.
+\end{itemize}
+$\tsa$ retains the intrinsic device read/latch floor (and restore, for
+destructive cells). Decoder volume tracks the array it drives; sense-amp volume
+is a fixed footprint per amp --- the earlier Pelgrom area law
 $\Asa\propto1/\mathrm{margin}^2$ is dropped, because the accurate cost of a
 sensing margin is the settling \emph{time} above, not sense-amp area.
 
@@ -212,6 +288,19 @@ Bandwidth lives in $\Lper$. Hence \textbf{cell density is a quantified indirect
 bandwidth lever}: shrinking $\acell$ (e.g.\ by making the cell 3D / multi-tier)
 lowers $\Larr$ and frees peripheral tiers for more sense amps --- worthwhile iff
 the freed tiers buy more $\Nsa$ than the added cell complexity costs in $\Volarr$.
+
+\subsection{Charge-share row cap}
+For a destructive charge-sharing cell the developed signal amplitude
+$C_{\mathrm{cell}}/(C_{\mathrm{cell}}+c_{BL}\Nwl)$ must stay above the sense-amp
+offset margin $m_{\mathrm{SA}}$. This is an amplitude, not a speed, constraint,
+so it enters as a constant upper bound on the rows rather than a develop-time
+term:
+\begin{equation}
+  \Nwl \;\le\; \frac{C_{\mathrm{cell}}\,(1-m_{\mathrm{SA}})}{c_{BL}\,m_{\mathrm{SA}}}.
+  \label{eq:rowcap}
+\end{equation}
+This is why DESTINY caps DRAM subarray rows; for non-destructive
+(current/voltage) cells the bound is absent.
 
 \subsection{Optimal sharing degree}
 Interleaving helps only until the develop term in \eqref{eq:tcyc} drops to the
@@ -245,13 +334,15 @@ dependency order:
   \item \textbf{Array geometry} --- fixes the $\tcyc$ floor \eqref{eq:tcyc} and $\Volarr,\Asa$.
   \item \textbf{Sense-amp stacking + mux degree} --- raises $\bacc$ toward $\Nbl$ \eqref{eq:width}.
   \item \textbf{Share to $\Nshare^\star$} --- reaches the $\tcyc$ floor at minimum cost \eqref{eq:nshare}.
-  \item \textbf{Fill $\Lper$} --- spend remaining peripheral area on $\Nsa$ \eqref{eq:layers}, maximizing \eqref{eq:bw}.
+  \item \textbf{Fill $\Lper$} --- spend remaining peripheral area on $\Nsa$ \eqref{eq:layers}, maximizing \eqref{eq:bw}, until either the peripheral area or the power-density budget \eqref{eq:power} binds.
 \end{enumerate}
 
 \section{Scope and deferrals}
 \label{sec:scope}
-Phase 1 is a \emph{packing} model: how much bandwidth-producing hardware fits in
-$L$ tiers of area $A$ at capacity $C$. Two assumptions justify deferring routing:
+The model is a \emph{packing-plus-power} model: how much bandwidth-producing
+hardware fits in $L$ tiers of area $A$ at capacity $C$ without exceeding the
+cooling power density $\Pmax$ \eqref{eq:power}. Two assumptions justify deferring
+routing:
 (i) \textbf{distributed vertical bottom-exit} --- each independent array exits
 its bits through a local per-array vertical port grid, so there is no die-scale
 horizontal data-collection network; and (ii) \textbf{consumer-provisioned} --- we
@@ -261,10 +352,11 @@ across banking choices), so the packing result is close to physical rather than 
 loose upper bound. The internal selector cost is retained ($\tsw$, $\Volsel$).
 
 \medskip\noindent
-\textbf{Deferred:} the thermal boundary condition (a pluggable stub returns
-$P_{\max}$ from an areal $R_{\mathrm{th}}$; the concurrency cap
-$\Nsa^{\mathrm{active}} \le \Delta T_{\max}/(R_{\mathrm{stack}}\,E_{\mathrm{access}}/\tcyc)$
-then caps simultaneously-firing sense amps), the power-delivery network, and the
-lateral address/command distribution (narrow, assumed provisioned).
+\textbf{Deferred:} the thermal boundary condition that \emph{sets} $\Pmax$ (a
+pluggable stub maps an areal $R_{\mathrm{th}}$ and $\Delta T_{\max}$ to the
+power-density budget consumed in \eqref{eq:power}); the power-delivery network;
+and the lateral address/command distribution (narrow, assumed provisioned). Note
+the power-density \emph{constraint} itself is no longer deferred --- it is
+enforced directly through the per-access energy model of Sec.~\ref{sec:kernel}.
 
 \end{document}

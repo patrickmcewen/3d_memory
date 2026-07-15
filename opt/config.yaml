@@ -21,10 +21,18 @@ defaults:
     # Cooling power-density budget. 1 W/mm^2 == 1 uW/um^2 (the model's unit),
     # so P_max is numerically identical in both. Presets: 0.4 air / 1.1 liquid
     # (default) / 2.0 microfluidic (docs/ENERGY_MODEL_SPEC.md).
-    P_max:   1000000000.1        # power-density ceiling           [W/mm^2 == uW/um^2]
+    P_max:   1.1        # power-density ceiling           [W/mm^2 == uW/um^2]
 
   # ---- technology / calibration coefficients ----
-  # TODO(calibration): placeholders until a memory_model fit replaces them.
+  # Peripheral volumes calibrated 2026-07-14 from the `memory_model` subarray tool
+  # (SRAM_GEN size sweep; reproduce with opt/calibrate_periph.py): each block's per-row/per-column
+  # area SLOPE is separated from the fixed intercept, normalized to F^2 (F=Lgate),
+  # then to 16 nm volume via v = area_F2*(16e-3 um)^2*t_layer -- the same currency
+  # as v_cell. The CMOS periphery (v_wldrv, v_sa0 voltage latch, v_pre, v_periph)
+  # is a shared logic process, so it lives in `defaults`; the terms memory_model
+  # CANNOT model -- resistive SET/RESET write drivers (v_wdrv), HV BL/SL pass gates
+  # (v_pass), and current-sense IV converters (v_sa0) -- stay EMBER/DESTINY-anchored
+  # in the per-type overrides below.
   technology:
     k_dec:       0.02     # decoder delay per address bit          [ns]
     # WL develop = distributed WIRE self-RC (quadratic) + CELL/gate load (linear):
@@ -41,15 +49,19 @@ defaults:
     t_restore:   0.8      # restore time (destructive read)         [ns]
     destructive: 0        # 1 => fold restore into t_SA (DRAM-like)
     t_sw:        0.03     # selector switching time                 [ns]
+    # Per-component peripheral volumes (model.py::TechSpec / build_model). Each
+    # circuit block scales by its own physical law; a block a technology lacks is
+    # zeroed (e.g. charge-share DRAM: v_wdrv=0, write-back via the sense amp).
+    # SHARED endpoints (per sensed/written bit, scale with N_SA):
     v_cell:      0.02     # volume per stored bit                   [um^3/bit]
-    v_sa0:       4.0      # sense-amp volume (constant per amp)     [um^3]
-    k_vdec:      0.004    # decoder volume per array cell           [um^3/cell]
-    v_sel:       0.2      # selector vol per (EXTRA shared array x SA) [um^3] (0 at N_share=1)
-    # Fixed periphery per PHYSICAL array (row decoder + WL drivers + array
-    # edge/guard band), independent of array size. Without it a 1-row array is
-    # "free", so the optimizer shrinks N_WL->1 to dodge BL settling; this term
-    # is the amortization pressure that gives a finite optimal subarray height.
-    v_periph:    0.0   # peripheral overhead per array           [um^3/array]
+    v_sa0:       0.26     # voltage-latch sense amp, per sensed bit [um^3/bit] (memory_model SRAM fit; current-sense +IV converter overrides below)
+    v_wdrv:      0.05     # CMOS bitline write driver, per access bit [um^3/bit] (resistive SET/RESET drivers override large)
+    # PER-ARRAY in-array strips (scale with columns/rows over every array):
+    v_pass:      0.0      # HV BL/SL pass-gate, per column          [um^3/col] (0 for CMOS-accessed cells; resistive 1T1R overrides)
+    v_pre:       0.017    # precharger, per column                  [um^3/col] (memory_model SRAM fit)
+    v_wldrv:     2.65     # WL driver + row decoder, per row        [um^3/row] (memory_model SRAM fit; DOMINANT CMOS periphery)
+    v_sel:       0.2      # inter-array sharing selector, per (EXTRA shared array x SA) [um^3] (0 at N_share=1)
+    v_periph:    90.0     # fixed decode/control overhead per array [um^3/array] (memory_model fixed intercept)
     # ---- sense-settling model (Upton 2024 App. A/B; DRAM charge-share) ----
     sense_mode:  voltage  # 'current' (App. A) | 'voltage' (App. B) | 'charge_share' (1T1C DRAM)
     settle_frac: 0.99     # Delta: fraction of steady state to settle to
@@ -84,7 +96,6 @@ defaults:
     Nshare_min: 1
     Nshare_max: 100
     Nindep_max: 2.0e5
-    BW_max:     1.0e9
 
   # ---- optional: pin decision variables to a fixed value ----
   # Any of N_BL / N_WL / N_share listed here is fixed by collapsing its
@@ -115,6 +126,7 @@ configs:
       t_restore: 1.2
       c_cell:    25.0     # ~25 fF storage cap (JEDEC DRAM design target)
       v_cell:    0.012    # denser bitcell
+      v_wdrv:    0.0      # destructive charge-share writes back through the sense amp -- no dedicated write driver
 
   nvm_100Mb:
     description: Non-destructive resistive NVM; current sensing, slower read.
@@ -122,7 +134,9 @@ configs:
       sense_mode: current
       t_SA0:  0.6
       i_read: 3.0         # weaker read current -> slower settle
-      v_sa0:  9.0
+      v_sa0:  13.0        # current sense + DESTINY IV converter
+      v_wdrv: 30.0        # resistive SET/RESET needs wide HV write drivers
+      v_pass: 0.5         # HV BL/SL pass gates, edge-stacked (pitch > cell)
       v_cell: 0.03
 
   gaincell_tight_settle:
@@ -169,7 +183,7 @@ configs:
       sense_mode: voltage
       t_SA0:  0.5       # NVMExplorer read 0.5-1.5 ns (7-16 nm)
       v_cell: 0.0374    # 146 F^2 (NVMExplorer / DESTINY sample_SRAM.cell) @ 16 nm
-      v_sa0:  4.0       # voltage latch sense-amp (no IV converter)
+      # v_sa0 inherits the memory_model voltage-latch default (0.26)
 
   edram_16nm:
     description: 1T1C embedded DRAM; destructive passive charge-share read ->
@@ -184,7 +198,8 @@ configs:
       t_SA0:     1.5    # charge-share sense; NVSim DRAM tRCD ~15 ns (90 nm), scaled
       t_restore: 6.0    # tRAS-tRCD write-back
       v_cell:    0.0154 # 60 F^2 (DESTINY sample_2D_eDRAM.cell) @ 16 nm
-      v_sa0:     4.0
+      # v_sa0 inherits the memory_model voltage-latch default (0.26)
+      v_wdrv:    0.0    # destructive charge-share writes back through the sense amp
       c_cell:    10.0   # ~10 fF eDRAM storage cap (denser 1T1C, < commodity DRAM)
 
   sttmram_16nm:
@@ -194,7 +209,9 @@ configs:
       t_SA0:  5.0       # NVMExplorer read 1.3-19 ns; DESTINY-validated 4.83 ns (45 nm)
       i_read: 4.0       # TMR read current
       v_cell: 0.00512   # 20 F^2 (NVMExplorer 14-75 F^2, low end) @ 16 nm
-      v_sa0:  20.0      # current sense + IV converter
+      v_sa0:  13.0      # 0.26 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
+      v_wdrv: 20.0      # STT switching-current write driver
+      v_pass: 0.3       # HV BL/SL pass gates
 
   sotmram_16nm:
     description: SOT-MRAM 3-terminal; decoupled fast read (current sense),
@@ -204,7 +221,9 @@ configs:
       t_SA0:  4.0       # NVMExplorer read 1.4-11 ns; DESTINY-validated 3.8 ns (SLC)
       i_read: 5.0
       v_cell: 0.00512   # 20 F^2 (NVMExplorer single point) @ 16 nm
-      v_sa0:  20.0      # current sense + IV converter
+      v_sa0:  13.0      # 0.26 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
+      v_wdrv: 20.0      # SOT write-current driver
+      v_pass: 0.3       # HV BL/SL pass gates
 
   reram_16nm:
     description: ReRAM 1T1R; non-destructive resistive read, current sensing.
@@ -214,7 +233,9 @@ configs:
       i_read: 3.0       # 1T1R access-limited read current
       t_sw:   0.05      # 1T1R access + bleed-path selector
       v_cell: 0.00307   # 12 F^2 (NVMExplorer 4-53 F^2, 1T1R access-limited) @ 16 nm
-      v_sa0:  20.0      # current sense + IV converter
+      v_sa0:  13.0      # 0.26 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
+      v_wdrv: 40.0      # RRAM SET/RESET HV drivers dominate periphery (EMBER: BL/SL drivers+muxes ~33%)
+      v_pass: 0.5       # HV BL/SL pass gates, edge-stacked (EMBER Fig. 6)
 
   reram_xpoint_16nm:
     description: Crosspoint ReRAM (0T1R / 1D1R); ~4 F^2, but IR-drop / sneak-path
@@ -230,7 +251,11 @@ configs:
       i_read: 2.0       # weak crosspoint read current (sneak paths)
       t_sw:   0.1       # 2-terminal selector nonlinearity (no access transistor)
       v_cell: 0.001024  # 4 F^2 (NVSim cross-point 0T1R/1D1R) @ 16 nm
-      v_sa0:  20.0      # current sense + IV converter
+      v_sa0:  13.0      # 0.26 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
+      v_wdrv: 15.0      # SET/RESET drivers present, but no per-cell 1T1R access FET (0T1R density win)
+      v_wldrv: 0.3      # 0T1R row line is an edge current driver, NOT a CMOS row decoder (no access-FET gate stack) -> << the SRAM-fit default 2.65
+      # v_pass stays at the default (0.0): 0T1R has no HV access/pass transistor;
+      # column select is the edge mux + the 2-terminal selector (already in t_sw).
 
   pcram_16nm:
     description: PCM 1T1R; non-destructive read but slow, voltage-mode sense
@@ -240,7 +265,9 @@ configs:
       t_SA0:  2.0       # intrinsic sense floor; NVSim-validated 65.9 ns @ 0.12 um total
       r_pullup: 320000.0 # high pull-up for high-R cell -> slow settle
       v_cell: 0.0064    # 25 F^2 (NVMExplorer 25-40 F^2, low end) @ 16 nm
-      v_sa0:  8.0       # voltage sense, larger write drivers
+      v_sa0:  1.0       # voltage sense; high-R cell -> weak signal comparator > SRAM latch
+      v_wdrv: 40.0      # PCM melt-current RESET needs wide HV write drivers
+      v_pass: 0.5       # HV BL/SL pass gates, edge-stacked
 
   fefet_16nm:
     description: FeFET; transistor-based non-destructive read (voltage sense).
@@ -249,4 +276,4 @@ configs:
       sense_mode: voltage
       t_SA0:  1.0       # FeRAM read ~14 ns; FeFET read faster (transistor sense)
       v_cell: 0.00384   # 15 F^2 (NVMExplorer FeFET 4-103 F^2) @ 16 nm
-      v_sa0:  4.0
+      # v_sa0 inherits the memory_model voltage-latch default (0.26)

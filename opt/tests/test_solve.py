@@ -141,7 +141,11 @@ def test_aux_var_equalities_feasible(cfg):
     """Every def_* product-variable equality must hold at the solution."""
     defaults, configs = cfg
     m, _ = _solve_bw("reram_16nm", defaults, configs)
+    from pyomo.core.expr import identify_variables
     for c in m.component_objects(pyo.Constraint):
         if c.local_name.startswith("def_"):
             resid = abs(pyo.value(c.body) - pyo.value(c.lower))
-            assert resid < 1e-4, f"{c.local_name} residual {resid:.3e}"
+            # Relative tolerance: these product vars reach ~1e12, so an absolute
+            # bound is below Gurobi's own feasibility tolerance at that magnitude.
+            scale = max([1.0] + [abs(v.value) for v in identify_variables(c.body)])
+            assert resid < 1e-9 * scale, f"{c.local_name} rel residual {resid/scale:.3e}"
