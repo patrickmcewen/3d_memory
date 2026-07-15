@@ -79,9 +79,18 @@ only), `DRAMCellCapacitance = c_cell` (charge-share).
 **Timing calibrated 2026-07-14 (T1/T2/T3 in config.yaml):** voltage-sensed cells
 now develop the bitline to the *sense margin* (`settle_frac` 0.99→0.1, i.e.
 `V_margin/V_signal`), and `t_SA0` for latch cells dropped to a pure latch-resolve
-floor (0.05 ns) so it no longer double-counts the develop that `t_BL` carries.
+floor so it no longer double-counts the develop that `t_BL` carries.
 Current-mode (`t_BL`) left untouched — DESTINY's current-sense bitline is the
 untrusted number, not the model.
+
+**Voltage `t_SA0` matched to DESTINY 2026-07-15:** the latch-resolve floor for the
+fast voltage-latch cells (`defaults`/`gaincell_*`, `sram_16nm`, `fefet_16nm`) was
+lowered 0.05 ns → 0.00266 ns to match DESTINY's computed voltage sense-amp latency
+`tau*ln(vdd/V_sense) = 2.66 ps` @22nm (`SenseAmp::CalculateLatency`,
+[SenseAmp.cpp:126-129]). This closes the last standalone voltage timing bucket
+(was 18.8×, now ~1.0×); the absolute shift is only ~47 ps so `TOTAL(dev)` is
+essentially unchanged. `pcram_16nm` keeps its high `t_SA0` (2 ns) on purpose —
+DESTINY's generic voltage read under-models genuine PCM read slowness.
 
 - **decode+WL agrees best:** model 1.0–1.7× DESTINY.
 - **Bitline latency (voltage/latch): now 0.99–1.23× DESTINY** for SRAM/gaincell
@@ -89,8 +98,10 @@ untrusted number, not the model.
   Horowitz input-ramp term `t_BL = sqrt(t_BLrc² + c_slew·t_BLrc·t_WL)`) captures
   DESTINY's column-dependence — the wide-short corner (1024 cols × 256 rows) went
   from 0.35× → 0.99×. Recovers the slew-free settle as `t_WL → 0` or `c_slew → 0`.
-- **`t_SA` (voltage): model 50 ps vs DESTINY 2.7 ps latch regen.** Small absolute
-  gap; no longer dominates the total. Going lower is unphysical for a latch floor.
+- **`t_SA` (voltage): now matched to DESTINY at 2.66 ps** (was 50 ps → 18.8×).
+  `t_SA0` set to DESTINY's latch regeneration `tau*ln(vdd/V_sense)` (see the
+  2026-07-15 note above); the bucket is now ~1.0× and the ~47 ps shift leaves
+  `TOTAL(dev)` essentially unchanged.
 - **PCRAM left divergent on purpose:** `t_SA0=2 ns` + high `r_pullup` encode
   genuine PCM read slowness; DESTINY's generic voltage read (81 ps bitline,
   2.7 ps SA) under-models it. Same caveat class as current mode.

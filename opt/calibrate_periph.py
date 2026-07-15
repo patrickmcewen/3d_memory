@@ -5,31 +5,31 @@ The phase-1 BW-max model (opt/model.py) charges each peripheral circuit block
 against the volume budget with its own scaling law (v_wldrv per row, v_sa0 per
 sensed bit, v_pre/v_pass per column, v_periph fixed per array). This script
 derives those coefficients from the ``destiny_3d_cache`` submodule
-(memory/3d_memory/destiny_3d_cache) -- the same DESTINY build used as the
-cross-validation reference in opt/xvalidate.
+(memory/3d_memory/destiny_3d_cache) -- the same DESTINY build opt/xvalidate uses.
 
-Method: force DESTINY to a single ``n_row x n_col`` subarray with one sense amp
-per column (1x1 bank / 1x1 mat / muxSenseAmp=1, i.e. WordWidth = numColumn), sweep
-the rows/cols, and linearly regress each component's area to separate the per-row
-/ per-column SLOPE from the fixed (predecoder / control) INTERCEPT. DESTINY emits
-the per-component subarray areas on stderr (``PERIPHFIT ...``, added via
-SubArray::PrintAreaBreakdown so the normal stdout report stays untouched). Areas
-are normalized to F^2 (F = ProcessNode, node-independent) and then to 16 nm volume
-via the tool convention  v = area_F2 * (16e-3 um)^2 * t_layer(1 um)  -- the same
-currency as v_cell.
+Calibrated at the MODEL'S OPERATING REGIME, not an idealized single-subarray:
+the model senses ``b_acc`` bits from ``N_BL`` columns, i.e. a column mux of
+``N_BL/b_acc > 1``, and the optimizer favors wide-short arrays (N_BL >> N_WL).
+So the sweep runs at ``b_acc = B_ACC`` (mux = n_col/b_acc, matching xvalidate),
+and the WL-driver/row-decoder lever is fit at WIDE columns where its per-row area
+has saturated. (An earlier revision fit at mux=1 / one-SA-per-column, which
+under-counts the sense-amp and bl-strip area the model actually sees at mux>1 and
+the WL-driver area at wide arrays -- see opt/xvalidate AREA section.)
 
-The CFG/cell generation is shared with opt/xvalidate (imported below), so a cell
-family DESTINY lays out (SRAM latch, charge-share DRAM) calibrates the CMOS
-periphery shared across cell techs (the config `defaults`). Resistive SET/RESET
-write drivers, HV pass gates, and current-sense IV converters are NOT laid out by
-this SRAM sweep and stay EMBER/DESTINY-anchored in the per-type config overrides.
+Per-component subarray areas come from DESTINY's stderr ``PERIPHFIT`` line
+(SubArray::PrintAreaBreakdown), parsed and normalized to 16 nm volume [um^3] by
+xvalidate.run_destiny / destiny_components -- the same v_cell currency the volume
+budget uses. The fit separates each block's per-row / per-column SLOPE from the
+fixed (predecode/control) INTERCEPT (-> v_periph).
+
+This SRAM sweep calibrates the CMOS periphery shared across cell techs (config
+`defaults`). Resistive SET/RESET write drivers, HV pass gates, and current-sense
+IV converters are NOT laid out by it and stay EMBER/DESTINY-anchored in the
+per-type config overrides.
 
 Run:  opt/.venv/bin/python opt/calibrate_periph.py
 (non-mutating: writes scratch .cell/.cfg into the gitignored opt/xvalidate/_work).
 """
-import os
-import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -40,47 +40,24 @@ DESTINY_DIR = MEMROOT / "3d_memory" / "destiny_3d_cache"     # the git submodule
 DESTINY_BIN = DESTINY_DIR / "destiny"
 WORK = OPT / "xvalidate" / "_work"                           # gitignored scratch dir
 
-# Reuse xvalidate's proven DESTINY cfg/cell generation and config loading.
+# Reuse xvalidate's DESTINY runner (forces b_acc=B_ACC, mux=n_col/B_ACC) and its
+# PERIPHFIT area parse + 16 nm-volume normalization (destiny_components).
 sys.path.insert(0, str(OPT))
 sys.path.insert(0, str(OPT / "xvalidate"))
-from xvalidate import (CFG_TEMPLATE, DTYPE_ROADMAP, DTYPE_NODE, NODE_NM,  # noqa: E402
+from xvalidate import (run_destiny, destiny_components, B_ACC,  # noqa: E402
                        load_configs, merged_tech)
-from tech_map import build_cell_params, cell_text  # noqa: E402
 
-CONV16 = (16e-3) ** 2 * 1.0          # um^3 per F^2 at 16 nm, t_layer = 1 um (= 2.56e-4)
-# DESTINY rejects tall SRAM bitlines (>512 rows) and very wide words (>1024 cols)
-# as invalid, so the row/column levers use different, separately-valid ranges.
-ROW_SIZES = [64, 128, 256, 512]      # sweep rows @ cols=256
-COL_SIZES = [128, 256, 512, 1024]    # sweep cols @ rows=256
-_PERIPHFIT = re.compile(
-    r"PERIPHFIT numRow=(\d+) numColumn=(\d+) subarray_um2=(\S+) "
-    r"cells_um2=(\S+) rowdec_um2=(\S+) senseamp_um2=(\S+)")
+TEMP = 350                            # match xvalidate's operating temperature
+FIXED_ROWS = 256                      # rows held fixed while sweeping columns
+WIDE_COLS = 1024                      # WL driver saturates by ~512 cols; fit v_wldrv here
+ROW_SIZES = [256, 512, 1024]          # sweep rows @ WIDE_COLS (DESTINY-valid range)
+COL_SIZES = [128, 256, 512, 1024]     # sweep cols @ FIXED_ROWS (mux = cols/B_ACC)
 
 
-def run(config_name, tech, dtype, node, n_row, n_col):
-    """Force one n_row x n_col subarray (one SA per column) in destiny_3d_cache,
-    parse the stderr PERIPHFIT per-component areas [um^2]."""
-    assert n_row * n_col % 8192 == 0, f"{n_row}x{n_col} is not an integer #KB"
-    cap_kb = n_row * n_col // 8192
-    b_acc = n_col                                       # WordWidth = columns => muxSenseAmp = 1
-    stem = f"calib_{config_name}_{n_row}x{n_col}"
-    cell_name = f"{stem}.cell"
-    cell, _ = build_cell_params(config_name, tech)
-    (WORK / cell_name).write_text(cell_text(cell))
-    (WORK / f"{stem}.cfg").write_text(CFG_TEMPLATE.format(
-        node=node, cap_kb=cap_kb, b_acc=b_acc, cell_name=cell_name,
-        temp=300, mux_sa=1, roadmap=DTYPE_ROADMAP[dtype], retention=""))
-
-    proc = subprocess.run([str(DESTINY_BIN), f"{stem}.cfg"], cwd=WORK,
-                          capture_output=True, text=True, timeout=180)
-    hits = [m for m in _PERIPHFIT.findall(proc.stderr)
-            if (int(m[0]), int(m[1])) == (n_row, n_col)]
-    assert hits, (f"{stem}: no PERIPHFIT for {n_row}x{n_col} "
-                  f"(built {[(m[0], m[1]) for m in _PERIPHFIT.findall(proc.stderr)]}); "
-                  f"stdout tail:\n{proc.stdout[-400:]}")
-    total, cells, rowdec, sa = (float(x) for x in hits[0][2:])
-    return dict(total=total, cells=cells, rowdec=rowdec, sa=sa,
-                blstrip=total - cells - rowdec - sa)
+def areas(name, tech, n_row, n_col):
+    """Per-component subarray areas [um^3 @16nm] at the operating mux."""
+    draw, _ = run_destiny(WORK, name, tech, n_row, n_col, TEMP)
+    return destiny_components(draw)   # a_array / a_senseamp / a_decode / a_blstrip / a_total
 
 
 def slope_intercept(xs, ys):
@@ -90,32 +67,27 @@ def slope_intercept(xs, ys):
     return slope, (sy - slope * sx) / n
 
 
-def fit(config_name, defaults, configs):
-    tech = merged_tech(defaults, configs, config_name)
-    _, dtype = build_cell_params(config_name, tech)
-    node = DTYPE_NODE.get(dtype, NODE_NM)               # ProcessNode = feature size F [nm]
+def fit(name, defaults, configs):
+    tech = merged_tech(defaults, configs, name)
+    row_runs = [(r, areas(name, tech, r, WIDE_COLS)) for r in ROW_SIZES]
+    col_runs = [(c, areas(name, tech, FIXED_ROWS, c)) for c in COL_SIZES]
 
-    row_runs = [(r, run(config_name, tech, dtype, node, r, 256)) for r in ROW_SIZES]
-    col_runs = [(c, run(config_name, tech, dtype, node, 256, c)) for c in COL_SIZES]
+    v_wldrv, _ = slope_intercept([r for r, _ in row_runs], [a["a_decode"] for _, a in row_runs])
+    v_pre, v_periph = slope_intercept([c for c, _ in col_runs], [a["a_blstrip"] for _, a in col_runs])
+    v_sa0 = sum(a["a_senseamp"] for _, a in col_runs) / len(col_runs) / B_ACC   # per sensed bit (constant)
+    a256 = areas(name, tech, 256, 256)
+    v_cell = a256["a_array"] / (256 * 256)
 
-    m_wl, b_wl = slope_intercept([r for r, _ in row_runs], [d["rowdec"] for _, d in row_runs])
-    m_sa, _ = slope_intercept([c for c, _ in col_runs], [d["sa"] for _, d in col_runs])
-    m_bl, b_bl = slope_intercept([c for c, _ in col_runs], [d["blstrip"] for _, d in col_runs])
-    v_cell_bit = run(config_name, tech, dtype, node, 256, 256)["cells"] / (256 * 256)
-
-    f_um2 = (node * 1e-3) ** 2                          # um^2 per F^2 at this node
-    to_vol = lambda a: a / f_um2 * CONV16               # um^2/unit -> F^2/unit -> um^3/unit @16nm
-    print(f"\n===== {config_name}  [DESTINY cell: {dtype} @ {node} nm] =====")
-    print(f"  v_wldrv (per row)    = {to_vol(m_wl):8.4f} um^3   ({m_wl / f_um2:8.0f} F^2)")
-    print(f"  v_sa0   (per col)    = {to_vol(m_sa):8.4f} um^3   ({m_sa / f_um2:8.0f} F^2)  [voltage latch]")
-    print(f"  v_pre+v_pass(per col)= {to_vol(m_bl):8.4f} um^3   ({m_bl / f_um2:8.0f} F^2)")
-    print(f"  v_periph(fixed/array)= {to_vol(max(0.0, b_bl)):8.4f} um^3   [BL-strip intercept]")
-    print(f"  v_cell  (per bit)    = {to_vol(v_cell_bit):8.5f} um^3   ({v_cell_bit / f_um2:6.1f} F^2)  [cross-check]")
+    print(f"\n===== {name} (b_acc={B_ACC}, operating mux) =====")
+    print(f"  v_sa0   (per sensed bit) = {v_sa0:8.4f} um^3   [voltage latch @ mux={256 // B_ACC}]")
+    print(f"  v_pre+v_pass (per col)   = {v_pre:8.4f} um^3   [bl-strip slope]")
+    print(f"  v_wldrv (per row)        = {v_wldrv:8.4f} um^3   [WL driver + row decoder @ {WIDE_COLS} cols]")
+    print(f"  v_periph (fixed/array)   = {max(0.0, v_periph):8.4f} um^3   [bl-strip intercept]")
+    print(f"  v_cell  (per bit)        = {v_cell:8.5f} um^3   [cross-check]")
 
 
 if __name__ == "__main__":
     assert DESTINY_BIN.exists(), f"destiny binary not found at {DESTINY_BIN} (run `make` in the submodule)"
     WORK.mkdir(parents=True, exist_ok=True)
     defaults, configs = load_configs(OPT / "config.yaml")
-    for cfg in ("sram_16nm", "gaincell_100Mb"):
-        fit(cfg, defaults, configs)
+    fit("sram_16nm", defaults, configs)

@@ -14,7 +14,7 @@ defaults:
 
   # ---- problem inputs (given) ----
   problem:
-    C:       800.0e9      # target capacity                 [bit]  (~800 Gbit)
+    C:       100.0e9      # target capacity                 [bit]  (~800 Gbit)
     A:       800.0e6    # footprint (area per layer)      [um^2]
     L:       8          # layer budget                    [layers]
     t_layer: 1.0        # physical thickness per layer    [um]
@@ -24,11 +24,12 @@ defaults:
     P_max:   1.1        # power-density ceiling           [W/mm^2 == uW/um^2]
 
   # ---- technology / calibration coefficients ----
-  # Peripheral volumes calibrated 2026-07-14 from the destiny_3d_cache submodule
-  # (SRAM subarray sweep; reproduce with opt/calibrate_periph.py): each block's per-row/per-column
-  # area SLOPE is separated from the fixed intercept, normalized to F^2 (F=ProcessNode),
-  # then to 16 nm volume via v = area_F2*(16e-3 um)^2*t_layer -- the same currency
-  # as v_cell. The CMOS periphery (v_wldrv, v_sa0 voltage latch, v_pre, v_periph)
+  # Peripheral volumes calibrated 2026-07-15 from the destiny_3d_cache submodule
+  # (SRAM subarray sweep at the model's OPERATING regime: b_acc sensed bits from N_BL
+  # columns i.e. mux=N_BL/b_acc>1, WL driver fit at wide/saturated columns; reproduce
+  # with opt/calibrate_periph.py): each block's per-row/per-column area SLOPE is
+  # separated from the fixed intercept, in 16 nm volume via v = area_F2*(16e-3 um)^2*
+  # t_layer -- the same currency as v_cell. The CMOS periphery (v_wldrv, v_sa0 voltage latch, v_pre, v_periph)
   # is a shared logic process, so it lives in `defaults`; the terms the SRAM sweep
   # CANNOT lay out -- resistive SET/RESET write drivers (v_wdrv), HV BL/SL pass gates
   # (v_pass), and current-sense IV converters (v_sa0) -- stay EMBER/DESTINY-anchored
@@ -45,7 +46,7 @@ defaults:
     # derived in opt/model.py::develop_coeffs from the physical params below:
     #   t_BL = f_margin(Delta,mode) * (a_lin*N_WL + a_quad*N_WL^2)
     # a_quad = 1/2*r_bl*c_bl (shared BL wire self-RC); a_lin per sense mode.
-    t_SA0:       0.05     # sense-amp/comparator resolve floor (voltage latch); develop carried by t_BL. Per-tech override for slower reads [ns]
+    t_SA0:       0.00266  # voltage-latch regeneration, calibrated to DESTINY SenseAmp::CalculateLatency = tau*ln(vdd/V_sense) = 2.66 ps @22nm; develop carried by t_BL. Per-tech override for slower reads [ns]
     t_restore:   0.8      # restore time (destructive read)         [ns]
     destructive: 0        # 1 => fold restore into t_SA (DRAM-like)
     t_sw:        0.007    # selector / column-mux switching time     [ns]  (DESTINY column-mux ~6.5 ps)
@@ -54,14 +55,14 @@ defaults:
     # zeroed (e.g. charge-share DRAM: v_wdrv=0, write-back via the sense amp).
     # SHARED endpoints (per sensed/written bit, scale with N_SA):
     v_cell:      0.02     # volume per stored bit                   [um^3/bit]
-    v_sa0:       0.125    # voltage-latch sense amp, per sensed bit [um^3/bit] (destiny_3d_cache SRAM fit; current-sense +IV converter overrides below)
+    v_sa0:       0.141    # voltage-latch sense amp, per sensed bit [um^3/bit] (destiny_3d_cache SRAM fit @ operating mux; current-sense +IV converter overrides below)
     v_wdrv:      0.05     # CMOS bitline write driver, per access bit [um^3/bit] (resistive SET/RESET drivers override large)
     # PER-ARRAY in-array strips (scale with columns/rows over every array):
     v_pass:      0.0      # HV BL/SL pass-gate, per column          [um^3/col] (0 for CMOS-accessed cells; resistive 1T1R overrides)
-    v_pre:       0.12     # precharger, per column                  [um^3/col] (destiny_3d_cache SRAM fit)
-    v_wldrv:     0.648    # WL driver + row decoder, per row        [um^3/row] (destiny_3d_cache SRAM fit; DOMINANT CMOS periphery)
+    v_pre:       0.143    # precharger + column-mux, per column     [um^3/col] (destiny_3d_cache SRAM fit @ operating mux)
+    v_wldrv:     0.867    # WL driver + row decoder, per row        [um^3/row] (destiny_3d_cache SRAM fit @ wide/saturated WL; DOMINANT CMOS periphery)
     v_sel:       0.2      # inter-array sharing selector, per (EXTRA shared array x SA) [um^3] (0 at N_share=1)
-    v_periph:    3.47     # fixed decode/control overhead per array [um^3/array] (destiny_3d_cache BL-strip intercept)
+    v_periph:    2.93     # fixed decode/control overhead per array [um^3/array] (destiny_3d_cache BL-strip intercept)
     # ---- sense-settling model (Upton 2024 App. A/B; DRAM charge-share) ----
     sense_mode:  voltage  # 'current' (App. A) | 'voltage' (App. B) | 'charge_share' (1T1C DRAM)
     settle_frac: 0.99     # Delta: BL develop target. Full-settle fallback; voltage tech points
@@ -120,6 +121,10 @@ configs:
     description: Non-destructive gain-cell macro; read-FET voltage sense (baseline).
     technology:
       settle_frac: 0.1  # sense-margin fraction; read-FET sense fires at the margin (t_SA0/t_sw inherit voltage-latch defaults)
+      c_bl:      0.146   # BL cap per cell, SRAM-anchor c_bl scaled by cell pitch sqrt(v_cell/0.0374) (smaller cell -> shorter bitline; xvalidate)
+      r_bl:      8.78    # BL resistance per cell, same cell-pitch scaling
+      k_wire_WL: 5.88e-8 # WL wire self-RC, SRAM-anchor scaled by pitch^2 = v_cell/0.0374 (shorter WL on a smaller cell; xvalidate)
+      k_cell_WL: 2.93e-5 # WL per-cell gate load, scaled by cell pitch sqrt(v_cell/0.0374)
 
   dram_100Mb:
     description: Destructive 1T1C DRAM-like cell; passive charge-share read
@@ -192,9 +197,9 @@ configs:
     technology:
       sense_mode: voltage
       settle_frac: 0.1  # sense-margin fraction (MinSenseVoltage/signal); latch fires at the margin, not full settle
-      t_SA0:  0.05      # latch regeneration floor (develop carried by t_BL); NVMExplorer 0.5-1.5 ns is end-to-end, not the latch alone
+      t_SA0:  0.00266   # latch regeneration, calibrated to DESTINY (tau*ln(vdd/V_sense) = 2.66 ps @22nm); develop carried by t_BL. NVMExplorer 0.5-1.5 ns is end-to-end, not the latch alone
       v_cell: 0.0374    # 146 F^2 (NVMExplorer / DESTINY sample_SRAM.cell) @ 16 nm
-      # v_sa0 inherits the destiny_3d_cache voltage-latch default (0.125)
+      # v_sa0 inherits the destiny_3d_cache voltage-latch default (0.141)
 
   edram_16nm:
     description: 1T1C embedded DRAM; destructive passive charge-share read ->
@@ -209,7 +214,7 @@ configs:
       t_SA0:     1.5    # charge-share sense; NVSim DRAM tRCD ~15 ns (90 nm), scaled
       t_restore: 6.0    # tRAS-tRCD write-back
       v_cell:    0.0154 # 60 F^2 (DESTINY sample_2D_eDRAM.cell) @ 16 nm
-      # v_sa0 inherits the destiny_3d_cache voltage-latch default (0.125)
+      # v_sa0 inherits the destiny_3d_cache voltage-latch default (0.141)
       v_wdrv:    0.0    # destructive charge-share writes back through the sense amp
       c_cell:    10.0   # ~10 fF eDRAM storage cap (denser 1T1C, < commodity DRAM)
 
@@ -221,7 +226,7 @@ configs:
       e_sa_read: 500.0  # sense-amp/IV-converter read energy per sensed bit (EMBER Fig. 5.26: VSA ~0.5 pJ/bit @40nm, dominant current-sense read cost; IV area in v_sa0)
       i_read: 4.0       # TMR read current
       v_cell: 0.00512   # 20 F^2 (NVMExplorer 14-75 F^2, low end) @ 16 nm
-      v_sa0:  12.9      # 0.125 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
+      v_sa0:  12.9      # 0.141 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
       v_wdrv: 20.0      # STT switching-current write driver
       v_pass: 0.3       # HV BL/SL pass gates
 
@@ -234,7 +239,7 @@ configs:
       e_sa_read: 500.0  # sense-amp/IV-converter read energy per sensed bit (EMBER Fig. 5.26: VSA ~0.5 pJ/bit @40nm, dominant current-sense read cost; IV area in v_sa0)
       i_read: 5.0
       v_cell: 0.00512   # 20 F^2 (NVMExplorer single point) @ 16 nm
-      v_sa0:  12.9      # 0.125 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
+      v_sa0:  12.9      # 0.141 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
       v_wdrv: 20.0      # SOT write-current driver
       v_pass: 0.3       # HV BL/SL pass gates
 
@@ -247,7 +252,7 @@ configs:
       i_read: 3.0       # 1T1R access-limited read current
       t_sw:   0.05      # 1T1R access + bleed-path selector
       v_cell: 0.00307   # 12 F^2 (NVMExplorer 4-53 F^2, 1T1R access-limited) @ 16 nm
-      v_sa0:  12.9      # 0.125 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
+      v_sa0:  12.9      # 0.141 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
       v_wdrv: 40.0      # RRAM SET/RESET HV drivers dominate periphery (EMBER: BL/SL drivers+muxes ~33%)
       v_pass: 0.5       # HV BL/SL pass gates, edge-stacked (EMBER Fig. 6)
 
@@ -266,7 +271,7 @@ configs:
       i_read: 2.0       # weak crosspoint read current (sneak paths)
       t_sw:   0.1       # 2-terminal selector nonlinearity (no access transistor)
       v_cell: 0.001024  # 4 F^2 (NVSim cross-point 0T1R/1D1R) @ 16 nm
-      v_sa0:  12.9      # 0.125 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
+      v_sa0:  12.9      # 0.141 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
       v_wdrv: 15.0      # SET/RESET drivers present, but no per-cell 1T1R access FET (0T1R density win)
       v_wldrv: 0.3      # 0T1R row line is an edge current driver, NOT a CMOS row decoder (no access-FET gate stack) -> << the SRAM-fit default 2.65
       # v_pass stays at the default (0.0): 0T1R has no HV access/pass transistor;
@@ -291,6 +296,10 @@ configs:
     technology:
       sense_mode: voltage
       settle_frac: 0.1  # sense-margin fraction; transistor sense fires at the margin, not full settle
-      t_SA0:  0.05      # comparator resolve floor (develop carried by t_BL); FeRAM ~14 ns figures are end-to-end reads
+      t_SA0:  0.00266   # latch regeneration, calibrated to DESTINY (tau*ln(vdd/V_sense) = 2.66 ps @22nm); develop carried by t_BL. FeRAM ~14 ns figures are end-to-end reads
       v_cell: 0.00384   # 15 F^2 (NVMExplorer FeFET 4-103 F^2) @ 16 nm
-      # v_sa0 inherits the destiny_3d_cache voltage-latch default (0.125)
+      c_bl:   0.0641    # BL cap per cell, SRAM-anchor c_bl scaled by cell pitch sqrt(v_cell/0.0374) (tiny 15 F^2 cell -> very short bitline; xvalidate)
+      r_bl:   3.85      # BL resistance per cell, same cell-pitch scaling
+      k_wire_WL: 1.13e-8 # WL wire self-RC, SRAM-anchor scaled by pitch^2 = v_cell/0.0374 (very short WL on a tiny cell; xvalidate)
+      k_cell_WL: 1.28e-5 # WL per-cell gate load, scaled by cell pitch sqrt(v_cell/0.0374)
+      # v_sa0 inherits the destiny_3d_cache voltage-latch default (0.141)

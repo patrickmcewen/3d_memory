@@ -151,7 +151,7 @@ def collect_values(m, problem: ProblemSpec, tech: TechSpec) -> dict:
     d["p_density"] = (d["P_dyn"] + d["P_leak"]) / d["A_used"]
     d["P_max"] = problem.P_max
     d["p_density_pct"] = 100 * d["p_density"] / problem.P_max
-    # Per-access dynamic-energy breakdown (the four E_access terms; see
+    # Per-access dynamic-energy breakdown (the five E_access terms; see
     # energy_coeffs / build_model). Sum == E_access == E_bit * b_acc.
     k_col, k_arr = energy_coeffs(tech)
     d["E_access"] = d["E_bit"] * d["b_acc"]                 # [fJ] per single-array access
@@ -221,9 +221,11 @@ def print_report(name: str, v: dict) -> None:
     print(f"    bitcell CV^2 = {v['e_bitcell']:.4g} fJ ({100 * v['e_bitcell'] / v['E_access']:.1f}%)"
           f"   BL wire = {v['e_blwire']:.4g} fJ ({100 * v['e_blwire'] / v['E_access']:.1f}%)")
     print(f"    periph       = {v['e_periph']:.4g} fJ ({100 * v['e_periph'] / v['E_access']:.1f}%)"
-          f"   write   = {v['e_write']:.4g} fJ ({100 * v['e_write'] / v['E_access']:.1f}%)")
+          f"   sense amp = {v['e_sa']:.4g} fJ ({100 * v['e_sa'] / v['E_access']:.1f}%)")
+    print(f"    write        = {v['e_write']:.4g} fJ ({100 * v['e_write'] / v['E_access']:.1f}%)")
     print(f"  energy/bit E_bit      = {v['E_bit'] * 1e-3:12.4g}  pJ/bit  (= E_access / b_acc)")
     print(f"  power  dyn / leak     = {v['P_dyn'] * 1e-6:.4g} / {v['P_leak'] * 1e-6:.4g} W")
+    print(f"  shared footprint A_used = {v['A_used']:12.4g}  um^2  (= vol_used / (L * t_layer))")
     print(f"  power density         = {v['p_density']:12.4g}  W/mm^2  ({v['p_density_pct']:.1f}% of P_max = {v['P_max']:.3g})")
     print("  ------------------------------------------------------------------")
     print(f"  data-wire conn pitch  = {v['conn_pitch']:12.4g}  um    (sqrt(A / N_SA))")

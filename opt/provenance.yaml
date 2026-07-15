@@ -12,9 +12,9 @@
 #
 # Feature-normalized cell areas use the common 16 nm mapping
 #     v_cell [um^3/bit] = cellArea_F2 * (16e-3 um)^2 * t_layer(=1 um) = F2 * 2.56e-4
-# IV-converter-bearing current-sense amps use  0.125 (destiny_3d_cache SenseAmp
+# IV-converter-bearing current-sense amps use  0.141 (destiny_3d_cache SenseAmp
 #     latch, SenseAmp.cpp:40) + 50000 F^2 * 2.56e-4 (destiny_3d_cache
-#     constant.h:50 IV_CONVERTER_AREA) = 12.93 um^3.
+#     constant.h:50 IV_CONVERTER_AREA) = 12.94 um^3.
 #
 # The runtime model does NOT read this file. Validate with:
 #     opt/.venv/bin/python opt/check_provenance.py
@@ -91,12 +91,16 @@ provenance:
   nvm_100Mb.technology.t_SA0:      {src: [assumption], loc: "resistive read floor ~0.6 ns"}
   nvm_100Mb.technology.e_sa_read:  {src: [ember], loc: "sense-amp/IV-converter read energy ~0.5 pJ/bit (EMBER Ch.5 Fig.5.26: VSA = 50% of ~1 pJ/bit @40nm); per sensed bit, NOT overfetch-amortized. Supersedes the DESTINY periph anchor, which underestimates (App. A p130)"}
   nvm_100Mb.technology.i_read:     {src: [assumption], loc: "weak read current ~3 uA"}
-  nvm_100Mb.technology.v_sa0:      {src: [destiny], loc: "0.125 latch (destiny_3d_cache SenseAmp.cpp:40) + IV converter 50000 F^2 (constant.h:50)", derive: "0.125 + 50000 * 2.56e-4"}
+  nvm_100Mb.technology.v_sa0:      {src: [destiny], loc: "0.141 latch (destiny_3d_cache SenseAmp.cpp:40) + IV converter 50000 F^2 (constant.h:50)", derive: "0.141 + 50000 * 2.56e-4"}
   nvm_100Mb.technology.v_wdrv:     {src: [assumption], loc: "resistive SET/RESET HV write drivers ~30 um^3"}
   nvm_100Mb.technology.v_pass:     {src: [assumption], loc: "HV BL/SL pass gates ~0.5 um^3/col"}
   nvm_100Mb.technology.v_cell:     {src: [assumption], loc: "resistive NVM placeholder ~117 F^2", derive: "117 * 2.56e-4"}
 
   gaincell_100Mb.technology.settle_frac: {src: [upton2024, destiny], loc: "Delta = sense-margin fraction ~0.1 (V_margin/V_signal); read-FET sense fires at the margin, not full settle. Cross-validated vs DESTINY bitline (opt/xvalidate)"}
+  gaincell_100Mb.technology.c_bl: {src: [assumption, destiny], loc: "SRAM-anchor c_bl (0.2) scaled by cell pitch sqrt(v_cell/v_cell_sram); BL cap per cell ~ pitch ~ sqrt(area). Matches DESTINY bitline reduction (opt/xvalidate)", derive: "0.2 * sqrt(0.02/0.0374)"}
+  gaincell_100Mb.technology.r_bl: {src: [assumption, destiny], loc: "SRAM-anchor r_bl (12) scaled by cell pitch sqrt(v_cell/v_cell_sram); BL resistance per cell ~ pitch", derive: "12 * sqrt(0.02/0.0374)"}
+  gaincell_100Mb.technology.k_wire_WL: {src: [assumption, destiny], loc: "SRAM-anchor k_wire_WL (1.1e-7) scaled by pitch^2 = v_cell/v_cell_sram; WL wire self-RC ~ (width)^2. Matches DESTINY decode+WL reduction (opt/xvalidate)", derive: "1.1e-7 * (0.02/0.0374)"}
+  gaincell_100Mb.technology.k_cell_WL: {src: [assumption, destiny], loc: "SRAM-anchor k_cell_WL (4e-5) scaled by cell pitch sqrt(v_cell/v_cell_sram); WL per-cell gate load ~ width", derive: "4e-5 * sqrt(0.02/0.0374)"}
 
   gaincell_tight_settle.technology.settle_frac: {src: [design_choice], loc: "Delta = 0.999 (tighter read margin sweep vs the 0.1 sense-margin baseline)"}
 
@@ -128,7 +132,7 @@ provenance:
   sttmram_16nm.technology.e_sa_read:  {src: [ember], loc: "sense-amp/IV-converter read energy ~0.5 pJ/bit (EMBER Ch.5 Fig.5.26: VSA = 50% of ~1 pJ/bit @40nm); per sensed bit, NOT overfetch-amortized"}
   sttmram_16nm.technology.i_read:     {src: [assumption], loc: "TMR read current ~4 uA"}
   sttmram_16nm.technology.v_cell:     {src: [nvmexplorer], loc: "20 F^2 (14-75 F^2, low end) @16nm", derive: "20 * 2.56e-4"}
-  sttmram_16nm.technology.v_sa0:      {src: [destiny], loc: "0.125 latch (destiny_3d_cache SenseAmp.cpp:40) + IV converter 50000 F^2 (constant.h:50)", derive: "0.125 + 50000 * 2.56e-4"}
+  sttmram_16nm.technology.v_sa0:      {src: [destiny], loc: "0.141 latch (destiny_3d_cache SenseAmp.cpp:40) + IV converter 50000 F^2 (constant.h:50)", derive: "0.141 + 50000 * 2.56e-4"}
   sttmram_16nm.technology.v_wdrv:     {src: [assumption], loc: "STT switching-current write driver ~20 um^3"}
   sttmram_16nm.technology.v_pass:     {src: [assumption], loc: "HV BL/SL pass gates ~0.3 um^3/col"}
 
@@ -138,7 +142,7 @@ provenance:
   sotmram_16nm.technology.e_sa_read:  {src: [ember], loc: "sense-amp/IV-converter read energy ~0.5 pJ/bit (EMBER Ch.5 Fig.5.26: VSA = 50% of ~1 pJ/bit @40nm); per sensed bit, NOT overfetch-amortized"}
   sotmram_16nm.technology.i_read:     {src: [assumption], loc: "read current ~5 uA"}
   sotmram_16nm.technology.v_cell:     {src: [nvmexplorer], loc: "20 F^2 (single point) @16nm", derive: "20 * 2.56e-4"}
-  sotmram_16nm.technology.v_sa0:      {src: [destiny], loc: "0.125 latch (destiny_3d_cache SenseAmp.cpp:40) + IV converter 50000 F^2 (constant.h:50)", derive: "0.125 + 50000 * 2.56e-4"}
+  sotmram_16nm.technology.v_sa0:      {src: [destiny], loc: "0.141 latch (destiny_3d_cache SenseAmp.cpp:40) + IV converter 50000 F^2 (constant.h:50)", derive: "0.141 + 50000 * 2.56e-4"}
   sotmram_16nm.technology.v_wdrv:     {src: [assumption], loc: "SOT write-current driver ~20 um^3"}
   sotmram_16nm.technology.v_pass:     {src: [assumption], loc: "HV BL/SL pass gates ~0.3 um^3/col"}
 
@@ -149,7 +153,7 @@ provenance:
   reram_16nm.technology.i_read:     {src: [assumption], loc: "1T1R access-limited read current ~3 uA"}
   reram_16nm.technology.t_sw:       {src: [assumption], loc: "1T1R access + bleed-path selector ~0.05 ns"}
   reram_16nm.technology.v_cell:     {src: [nvmexplorer], loc: "12 F^2 (4-53 F^2, 1T1R access-limited) @16nm", derive: "12 * 2.56e-4"}
-  reram_16nm.technology.v_sa0:      {src: [destiny], loc: "0.125 latch (destiny_3d_cache SenseAmp.cpp:40) + IV converter 50000 F^2 (constant.h:50)", derive: "0.125 + 50000 * 2.56e-4"}
+  reram_16nm.technology.v_sa0:      {src: [destiny], loc: "0.141 latch (destiny_3d_cache SenseAmp.cpp:40) + IV converter 50000 F^2 (constant.h:50)", derive: "0.141 + 50000 * 2.56e-4"}
   reram_16nm.technology.v_wdrv:     {src: [ember], loc: "SET/RESET HV drivers dominate periph (EMBER Fig. 6: ~33%) ~40 um^3"}
   reram_16nm.technology.v_pass:     {src: [ember], loc: "HV BL/SL pass gates, edge-stacked (EMBER Fig. 6) ~0.5 um^3/col"}
 
@@ -161,7 +165,7 @@ provenance:
   reram_xpoint_16nm.technology.i_read:      {src: [lepri2022], loc: "weak crosspoint read current ~2 uA (sneak paths)"}
   reram_xpoint_16nm.technology.t_sw:        {src: [assumption], loc: "2-terminal selector nonlinearity ~0.1 ns"}
   reram_xpoint_16nm.technology.v_cell:      {src: [nvsim], loc: "4 F^2 (cross-point 0T1R/1D1R) @16nm", derive: "4 * 2.56e-4"}
-  reram_xpoint_16nm.technology.v_sa0:       {src: [destiny], loc: "0.125 latch (destiny_3d_cache SenseAmp.cpp:40) + IV converter 50000 F^2 (constant.h:50)", derive: "0.125 + 50000 * 2.56e-4"}
+  reram_xpoint_16nm.technology.v_sa0:       {src: [destiny], loc: "0.141 latch (destiny_3d_cache SenseAmp.cpp:40) + IV converter 50000 F^2 (constant.h:50)", derive: "0.141 + 50000 * 2.56e-4"}
   reram_xpoint_16nm.technology.v_wdrv:      {src: [assumption], loc: "SET/RESET drivers, no per-cell access FET ~15 um^3 (0T1R density win)"}
   reram_xpoint_16nm.technology.v_wldrv:     {src: [assumption], loc: "0T1R edge current driver, not a CMOS row decoder << SRAM-fit 2.65"}
 
@@ -180,6 +184,10 @@ provenance:
   fefet_16nm.technology.settle_frac: {src: [upton2024, destiny], loc: "Delta = sense-margin fraction ~0.1; transistor sense fires at the margin. Cross-validated vs DESTINY bitline (opt/xvalidate)"}
   fefet_16nm.technology.t_SA0:       {src: [destiny], loc: "comparator resolve floor ~0.05 ns (develop carried by t_BL); FeRAM ~14 ns figures are end-to-end reads, not the sense alone"}
   fefet_16nm.technology.v_cell:     {src: [nvmexplorer], loc: "15 F^2 (FeFET 4-103 F^2) @16nm", derive: "15 * 2.56e-4"}
+  fefet_16nm.technology.c_bl:       {src: [assumption, destiny], loc: "SRAM-anchor c_bl (0.2) scaled by cell pitch sqrt(v_cell/v_cell_sram); tiny 15 F^2 cell -> very short bitline. Matches DESTINY bitline reduction (opt/xvalidate)", derive: "0.2 * sqrt(0.00384/0.0374)"}
+  fefet_16nm.technology.r_bl:       {src: [assumption, destiny], loc: "SRAM-anchor r_bl (12) scaled by cell pitch sqrt(v_cell/v_cell_sram); BL resistance per cell ~ pitch", derive: "12 * sqrt(0.00384/0.0374)"}
+  fefet_16nm.technology.k_wire_WL:  {src: [assumption, destiny], loc: "SRAM-anchor k_wire_WL (1.1e-7) scaled by pitch^2 = v_cell/v_cell_sram; WL wire self-RC ~ (width)^2. Matches DESTINY decode+WL reduction (opt/xvalidate)", derive: "1.1e-7 * (0.00384/0.0374)"}
+  fefet_16nm.technology.k_cell_WL:  {src: [assumption, destiny], loc: "SRAM-anchor k_cell_WL (4e-5) scaled by cell pitch sqrt(v_cell/v_cell_sram); WL per-cell gate load ~ width", derive: "4e-5 * sqrt(0.00384/0.0374)"}
 
 
 # =====================================================================
