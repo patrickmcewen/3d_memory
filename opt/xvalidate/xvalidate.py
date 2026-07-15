@@ -32,7 +32,7 @@ Component mapping (see tables printed at runtime):
 
 Run (needs the opt venv for pyyaml/pyomo-backed model import):
   opt/.venv/bin/python opt/xvalidate/xvalidate.py            # default sweep, all mapped configs
-  opt/.venv/bin/python opt/xvalidate/xvalidate.py --configs sram_16nm reram_16nm
+  opt/.venv/bin/python opt/xvalidate/xvalidate.py --configs sram_dest reram_dest
 """
 import argparse
 import math

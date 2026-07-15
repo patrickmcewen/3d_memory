@@ -191,7 +191,7 @@ configs:
   #   Upton 2024   = sensing settling-time appendices (current App. A, voltage App. B)
   # =====================================================================
 
-  sram_16nm:
+  sram_dest:
     description: 6T SRAM, non-destructive fast latch sense (voltage). Area-hungry
                  (146 F^2) so 100 Mb needs a tall stack.
     technology:
@@ -201,7 +201,7 @@ configs:
       v_cell: 0.0374    # 146 F^2 (NVMExplorer / DESTINY sample_SRAM.cell) @ 16 nm
       # v_sa0 inherits the destiny_3d_cache voltage-latch default (0.141)
 
-  edram_16nm:
+  edram_dest:
     description: 1T1C embedded DRAM; destructive passive charge-share read ->
                  write-back restore folded into the cycle. Denser (smaller)
                  storage cap than commodity DRAM, so signal collapses at fewer
@@ -218,7 +218,7 @@ configs:
       v_wdrv:    0.0    # destructive charge-share writes back through the sense amp
       c_cell:    10.0   # ~10 fF eDRAM storage cap (denser 1T1C, < commodity DRAM)
 
-  sttmram_16nm:
+  sttmram_dest:
     description: STT-MRAM 1T1R; non-destructive resistive read, current sensing.
     technology:
       sense_mode: current
@@ -230,7 +230,7 @@ configs:
       v_wdrv: 20.0      # STT switching-current write driver
       v_pass: 0.3       # HV BL/SL pass gates
 
-  sotmram_16nm:
+  sotmram_dest:
     description: SOT-MRAM 3-terminal; decoupled fast read (current sense),
                  non-destructive.
     technology:
@@ -243,7 +243,7 @@ configs:
       v_wdrv: 20.0      # SOT write-current driver
       v_pass: 0.3       # HV BL/SL pass gates
 
-  reram_16nm:
+  reram_dest:
     description: ReRAM 1T1R; non-destructive resistive read, current sensing.
     technology:
       sense_mode: current
@@ -256,7 +256,7 @@ configs:
       v_wdrv: 40.0      # RRAM SET/RESET HV drivers dominate periphery (EMBER: BL/SL drivers+muxes ~33%)
       v_pass: 0.5       # HV BL/SL pass gates, edge-stacked (EMBER Fig. 6)
 
-  reram_xpoint_16nm:
+  reram_xpoint_dest:
     description: Crosspoint ReRAM (0T1R / 1D1R); ~4 F^2, but IR-drop / sneak-path
                  caps the subarray size, so current-sense settling dominates.
     problem:
@@ -277,7 +277,7 @@ configs:
       # v_pass stays at the default (0.0): 0T1R has no HV access/pass transistor;
       # column select is the edge mux + the 2-terminal selector (already in t_sw).
 
-  pcram_16nm:
+  pcram_dest:
     description: PCM 1T1R; non-destructive read but slow, voltage-mode sense
                  (high cell resistance -> weak divider signal -> slow settle).
     technology:
@@ -290,7 +290,7 @@ configs:
       v_wdrv: 40.0      # PCM melt-current RESET needs wide HV write drivers
       v_pass: 0.5       # HV BL/SL pass gates, edge-stacked
 
-  fefet_16nm:
+  fefet_dest:
     description: FeFET; transistor-based non-destructive read (voltage sense).
                  Fast read, very low write energy.
     technology:

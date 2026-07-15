@@ -105,4 +105,4 @@ if __name__ == "__main__":
     assert DESTINY_BIN.exists(), f"destiny binary not found at {DESTINY_BIN} (run `make` in the submodule)"
     WORK.mkdir(parents=True, exist_ok=True)
     defaults, configs = load_configs(OPT / "config.yaml")
-    fit("sram_16nm", defaults, configs)
+    fit("sram_dest", defaults, configs)
