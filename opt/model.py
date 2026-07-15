@@ -381,7 +381,7 @@ def build_model(problem: ProblemSpec, tech: TechSpec, bounds: Bounds) -> pyo.Con
     m.E_access = pyo.Expression(
         expr=k_col * m.N_BL + k_arr * m.cells_arr
         + tech.e_periph + tech.e_periph_col * m.N_BL                        # fixed + per-column (decode/precharge/mux) periphery
-        + tech.e_sa_read * m.b_acc                                          # per-sensed-bit sense-amp/IV-converter read energy (NOT overfetch-amortized)
+        + tech.e_sa_read * m.b_acc                                          # [eq:energy_read_senseamp] per-sensed-bit sense-amp/IV-converter read energy (NOT overfetch-amortized)
         + f_w * tech.e_write_cell * m.b_acc)                                # [fJ] per single-array access
     E_bit_ub = (k_col * b.NBL_max + k_arr * b.NBL_max * nwl_hi
                 + tech.e_periph + tech.e_periph_col * b.NBL_max

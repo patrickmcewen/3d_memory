@@ -69,9 +69,9 @@ provenance:
   # Energy / power-density model (DESTINY SubArray::CalculatePower)
   defaults.technology.v_read:         {src: [destiny], loc: "read/precharge supply swing (CV^2); SubArray.cpp:687"}
   defaults.technology.v_sense:        {src: [ha2018, destiny], loc: "developed sense signal ~0.1 V (read bitline swing ~ MinSenseVoltage); charge-share dV=V_BLP/(1+C_BL/C_S). Now the partial read swing for BOTH voltage and charge-share sensed reads"}
-  defaults.technology.e_periph:       {src: [destiny], loc: "fixed decode/control periph intercept ~85 fJ/access (DESTINY periph vs N_BL intercept; SubArray::CalculatePower :685-775)"}
+  defaults.technology.e_periph:       {src: [destiny], loc: "fixed decode/control periph intercept (DESTINY periph vs N_BL intercept ~85 fJ minus the 27 fJ voltage-SA term now split out to e_sa_read; SubArray::CalculatePower :685-775)", derive: "85 - 27"}
   defaults.technology.e_periph_col:   {src: [destiny], loc: "per-column periph slope ~0.75 fJ/col (decode/precharge/column-mux drive); DESTINY periph grows ~linearly with N_BL, shared across modes"}
-  defaults.technology.e_sa_read:      {src: [design_choice], loc: "0 for voltage-latch reads -- the SA energy is small and folded into e_periph (matches DESTINY periph ~1.0x). Current-sense IV converters override per EMBER"}
+  defaults.technology.e_sa_read:      {src: [destiny], loc: "voltage-latch sense-amp read energy per sensed bit; DESTINY Senseamp Dynamic Energy (capLoad*vdd^2*numSenseAmp, SenseAmp.cpp:166-170) = 27 fJ @ b_acc=64, per bit = 27/64. Fit by opt/calibrate_periph.py; split out of the e_periph intercept. Current-sense IV converters override per Upton2024", derive: "27 / 64"}
   defaults.technology.e_write_cell:   {src: [design_choice], loc: "0 for the read-BW study (NVM Joule set/reset when >0)"}
   defaults.technology.p_leak_bit:     {src: [assumption], loc: "leakage/refresh power per stored bit ~1e-6 uW/bit"}
   defaults.technology.write_fraction: {src: [design_choice], loc: "0 = pure read-BW study"}
@@ -89,7 +89,7 @@ provenance:
 
   nvm_100Mb.technology.sense_mode: {src: [ember, nvsim], loc: "resistive current sensing"}
   nvm_100Mb.technology.t_SA0:      {src: [assumption], loc: "resistive read floor ~0.6 ns"}
-  nvm_100Mb.technology.e_sa_read:  {src: [ember], loc: "sense-amp/IV-converter read energy ~0.5 pJ/bit (EMBER Ch.5 Fig.5.26: VSA = 50% of ~1 pJ/bit @40nm); per sensed bit, NOT overfetch-amortized. Supersedes the DESTINY periph anchor, which underestimates (App. A p130)"}
+  nvm_100Mb.technology.e_sa_read:  {src: [upton2024, ember], loc: "sense-amp/IV-converter read energy ~0.5 pJ/bit (Upton2024 Ch.5 Fig.5.26, EMBER macro: VSA = sensing share ~50% of the ~1 pJ/bit end-to-end read @40nm); per sensed bit, NOT overfetch-amortized. Supersedes the DESTINY periph anchor, which underestimates (App. A p130)"}
   nvm_100Mb.technology.i_read:     {src: [assumption], loc: "weak read current ~3 uA"}
   nvm_100Mb.technology.v_sa0:      {src: [destiny], loc: "0.141 latch (destiny_3d_cache SenseAmp.cpp:40) + IV converter 50000 F^2 (constant.h:50)", derive: "0.141 + 50000 * 2.56e-4"}
   nvm_100Mb.technology.v_wdrv:     {src: [assumption], loc: "resistive SET/RESET HV write drivers ~30 um^3"}
@@ -129,7 +129,7 @@ provenance:
   # --- STT-MRAM (1T1R) ---
   sttmram_16nm.technology.sense_mode: {src: [nvsim], loc: "current: TMR resistive read"}
   sttmram_16nm.technology.t_SA0:      {src: [nvmexplorer, destiny], loc: "read 1.3-19 ns; DESTINY 4.83 ns (45 nm)"}
-  sttmram_16nm.technology.e_sa_read:  {src: [ember], loc: "sense-amp/IV-converter read energy ~0.5 pJ/bit (EMBER Ch.5 Fig.5.26: VSA = 50% of ~1 pJ/bit @40nm); per sensed bit, NOT overfetch-amortized"}
+  sttmram_16nm.technology.e_sa_read:  {src: [upton2024, ember], loc: "sense-amp/IV-converter read energy ~0.5 pJ/bit (Upton2024 Ch.5 Fig.5.26, EMBER macro: VSA = sensing share ~50% of the ~1 pJ/bit end-to-end read @40nm); per sensed bit, NOT overfetch-amortized"}
   sttmram_16nm.technology.i_read:     {src: [assumption], loc: "TMR read current ~4 uA"}
   sttmram_16nm.technology.v_cell:     {src: [nvmexplorer], loc: "20 F^2 (14-75 F^2, low end) @16nm", derive: "20 * 2.56e-4"}
   sttmram_16nm.technology.v_sa0:      {src: [destiny], loc: "0.141 latch (destiny_3d_cache SenseAmp.cpp:40) + IV converter 50000 F^2 (constant.h:50)", derive: "0.141 + 50000 * 2.56e-4"}
@@ -139,7 +139,7 @@ provenance:
   # --- SOT-MRAM (3-terminal) ---
   sotmram_16nm.technology.sense_mode: {src: [nvsim], loc: "current: decoupled fast read"}
   sotmram_16nm.technology.t_SA0:      {src: [nvmexplorer, destiny], loc: "read 1.4-11 ns; DESTINY 3.8 ns (SLC)"}
-  sotmram_16nm.technology.e_sa_read:  {src: [ember], loc: "sense-amp/IV-converter read energy ~0.5 pJ/bit (EMBER Ch.5 Fig.5.26: VSA = 50% of ~1 pJ/bit @40nm); per sensed bit, NOT overfetch-amortized"}
+  sotmram_16nm.technology.e_sa_read:  {src: [upton2024, ember], loc: "sense-amp/IV-converter read energy ~0.5 pJ/bit (Upton2024 Ch.5 Fig.5.26, EMBER macro: VSA = sensing share ~50% of the ~1 pJ/bit end-to-end read @40nm); per sensed bit, NOT overfetch-amortized"}
   sotmram_16nm.technology.i_read:     {src: [assumption], loc: "read current ~5 uA"}
   sotmram_16nm.technology.v_cell:     {src: [nvmexplorer], loc: "20 F^2 (single point) @16nm", derive: "20 * 2.56e-4"}
   sotmram_16nm.technology.v_sa0:      {src: [destiny], loc: "0.141 latch (destiny_3d_cache SenseAmp.cpp:40) + IV converter 50000 F^2 (constant.h:50)", derive: "0.141 + 50000 * 2.56e-4"}
@@ -149,7 +149,7 @@ provenance:
   # --- ReRAM (1T1R) ---
   reram_16nm.technology.sense_mode: {src: [ember], loc: "current: 1T1R resistive read"}
   reram_16nm.technology.t_SA0:      {src: [ember], loc: "latch floor; settling-dominated read (EMBER ~5 ns)"}
-  reram_16nm.technology.e_sa_read:  {src: [ember], loc: "sense-amp/IV-converter read energy ~0.5 pJ/bit (EMBER Ch.5 Fig.5.26: VSA = 50% of ~1 pJ/bit @40nm); per sensed bit, NOT overfetch-amortized"}
+  reram_16nm.technology.e_sa_read:  {src: [upton2024, ember], loc: "sense-amp/IV-converter read energy ~0.5 pJ/bit (Upton2024 Ch.5 Fig.5.26, EMBER macro: VSA = sensing share ~50% of the ~1 pJ/bit end-to-end read @40nm); per sensed bit, NOT overfetch-amortized"}
   reram_16nm.technology.i_read:     {src: [assumption], loc: "1T1R access-limited read current ~3 uA"}
   reram_16nm.technology.t_sw:       {src: [assumption], loc: "1T1R access + bleed-path selector ~0.05 ns"}
   reram_16nm.technology.v_cell:     {src: [nvmexplorer], loc: "12 F^2 (4-53 F^2, 1T1R access-limited) @16nm", derive: "12 * 2.56e-4"}
@@ -161,7 +161,7 @@ provenance:
   reram_xpoint_16nm.problem.L:              {src: [design_choice], loc: "2 layers (4 F^2 cell fills << one layer)"}
   reram_xpoint_16nm.technology.sense_mode:  {src: [nvsim], loc: "current: crosspoint resistive read"}
   reram_xpoint_16nm.technology.t_SA0:       {src: [assumption], loc: "latch floor; sneak-path settling carries read time"}
-  reram_xpoint_16nm.technology.e_sa_read:   {src: [ember], loc: "sense-amp/IV-converter read energy ~0.5 pJ/bit (EMBER Ch.5 Fig.5.26: VSA = 50% of ~1 pJ/bit @40nm); per sensed bit, NOT overfetch-amortized"}
+  reram_xpoint_16nm.technology.e_sa_read:   {src: [upton2024, ember], loc: "sense-amp/IV-converter read energy ~0.5 pJ/bit (Upton2024 Ch.5 Fig.5.26, EMBER macro: VSA = sensing share ~50% of the ~1 pJ/bit end-to-end read @40nm); per sensed bit, NOT overfetch-amortized"}
   reram_xpoint_16nm.technology.i_read:      {src: [lepri2022], loc: "weak crosspoint read current ~2 uA (sneak paths)"}
   reram_xpoint_16nm.technology.t_sw:        {src: [assumption], loc: "2-terminal selector nonlinearity ~0.1 ns"}
   reram_xpoint_16nm.technology.v_cell:      {src: [nvsim], loc: "4 F^2 (cross-point 0T1R/1D1R) @16nm", derive: "4 * 2.56e-4"}
@@ -258,6 +258,12 @@ equations:
     form: "V^2_eff = v_read*n_ut*f_margin (current mode) ; from E = V_read*I_read*t_s, t_s = tau*f_margin, tau = C_BL*n_ut/I_read -> I_read CANCELS -> E = V_read*C_BL*n_ut*f_margin"
     loc: "Upton 2024 App. A Eq. A.9/A.12 (tau = C_BL*n*U_t/I_b); App. A p130 (DESTINY/Seevinck incompatible); EMBER measured RRAM read energy (Ch. 5, Fig. 5.26)"
     desc: "Current-sense read energy: the read current integrated over the settling time. I_read cancels, leaving an effective bitline swing v_read*n_ut*f_margin (NOT full rail, NOT DESTINY's Seevinck-ported CV^2, which Upton shows underestimates resistive read at App. A p130). Feeds the same k_col/k_arr*bitline-cap structure as energy_read_access."
+
+  energy_read_senseamp:
+    src: [destiny, upton2024]
+    form: "E_sa = e_sa_read * b_acc  [fJ] ; e_sa_read = capLoad*vdd^2 (voltage) per sensed bit"
+    loc: "destiny_3d_cache SenseAmp::CalculatePower (SenseAmp.cpp:166-170): readDynamicEnergy = capLoad*vdd^2, *= numSenseAmp; current-sense IV-converter reads use the Upton2024 Ch.5 Fig.5.26 measured energy instead"
+    desc: "Per-sensed-bit sense-amp read energy, split out of the periph bucket. numSenseAmp = numColumn/mux = b_acc, so it is a per-bit constant that does NOT amortize with row overfetch (one amp per sensed bit). Voltage latches: DESTINY capLoad*vdd^2 (~0.42 fJ/bit @16nm, tiny). Current-sense/resistive: dominated by the IV-converter, taken from Upton2024/EMBER (~0.5 pJ/bit) which supersedes DESTINY's Seevinck CV model (App. A p130)."
 
   periph_volume_scaling:
     src: [ember, destiny]

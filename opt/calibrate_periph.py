@@ -60,6 +60,19 @@ def areas(name, tech, n_row, n_col):
     return destiny_components(draw)   # a_array / a_senseamp / a_decode / a_blstrip / a_total
 
 
+def sa_read_energy(name, tech, n_row, n_col):
+    """DESTINY voltage sense-amp read energy per SENSED bit [fJ/bit].
+
+    DESTINY's Senseamp Dynamic Energy = capLoad*vdd^2*numSenseAmp
+    (destiny_3d_cache SenseAmp::CalculatePower, SenseAmp.cpp:166-170), and the
+    sweep forces numSenseAmp = numColumn/mux = b_acc, so it is a per-sensed-bit
+    constant, geometry-independent -> per bit = e_SA / B_ACC. This is the model's
+    e_sa_read for voltage latches (split out of the DESTINY periph bucket that
+    e_periph is fit to; see opt/provenance.yaml energy_read_senseamp)."""
+    draw, _ = run_destiny(WORK, name, tech, n_row, n_col, TEMP)
+    return draw["e_Senseamp Dynamic Energy"] / B_ACC
+
+
 def slope_intercept(xs, ys):
     n = len(xs); sx = sum(xs); sy = sum(ys)
     sxx = sum(x * x for x in xs); sxy = sum(x * y for x, y in zip(xs, ys))
@@ -75,6 +88,7 @@ def fit(name, defaults, configs):
     v_wldrv, _ = slope_intercept([r for r, _ in row_runs], [a["a_decode"] for _, a in row_runs])
     v_pre, v_periph = slope_intercept([c for c, _ in col_runs], [a["a_blstrip"] for _, a in col_runs])
     v_sa0 = sum(a["a_senseamp"] for _, a in col_runs) / len(col_runs) / B_ACC   # per sensed bit (constant)
+    e_sa_read = sa_read_energy(name, tech, FIXED_ROWS, 256)                     # voltage SA read energy, per sensed bit
     a256 = areas(name, tech, 256, 256)
     v_cell = a256["a_array"] / (256 * 256)
 
@@ -84,6 +98,7 @@ def fit(name, defaults, configs):
     print(f"  v_wldrv (per row)        = {v_wldrv:8.4f} um^3   [WL driver + row decoder @ {WIDE_COLS} cols]")
     print(f"  v_periph (fixed/array)   = {max(0.0, v_periph):8.4f} um^3   [bl-strip intercept]")
     print(f"  v_cell  (per bit)        = {v_cell:8.5f} um^3   [cross-check]")
+    print(f"  e_sa_read (per sensed bit) = {e_sa_read:8.4f} fJ    [voltage SA CV^2; subtract {e_sa_read * B_ACC:.3g} fJ from e_periph intercept]")
 
 
 if __name__ == "__main__":

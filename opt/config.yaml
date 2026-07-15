@@ -87,9 +87,9 @@ defaults:
     # refresh, SRAM gate leak).
     v_read:         1.0     # read/precharge supply swing            [V]  per-tech
     v_sense:        0.1     # developed sense signal (read swing ~ MinSenseVoltage) [V] (voltage + charge-share reads)
-    e_periph:       85.0    # fixed decode/control energy/access      [fJ/access] (DESTINY periph intercept)
+    e_periph:       58.0    # fixed decode/control energy/access      [fJ/access] (DESTINY periph intercept, SA split out to e_sa_read: 85 - 27)
     e_periph_col:   0.75    # per-column periph: decode/precharge/column-mux drive [fJ/col] (DESTINY periph slope, shared)
-    e_sa_read:      0.0     # sense-amp/IV-converter read energy, per SENSED bit [fJ/bit] (0 for voltage latch -- SA folded in e_periph; current-sense overrides per EMBER)
+    e_sa_read:      0.4219  # voltage sense-amp read energy, per SENSED bit [fJ/bit] (DESTINY Senseamp Dynamic Energy / b_acc, opt/calibrate_periph.py; current-sense overrides per Upton2024)
     e_write_cell:   0.0     # per-cell write energy beyond CV^2      [fJ/bit]  per-tech (NVM)
     p_leak_bit:     1.0e-6  # leakage/refresh power per stored bit   [uW/bit]  per-tech
     write_fraction: 0.0     # fraction of accesses that are writes   [-]  (0 = read-BW study)
@@ -145,7 +145,7 @@ configs:
     technology:
       sense_mode: current
       t_SA0:  0.6
-      e_sa_read: 500.0    # sense-amp/IV-converter read energy per sensed bit (EMBER Fig. 5.26: VSA ~0.5 pJ/bit @40nm, dominant current-sense read cost; IV area in v_sa0)
+      e_sa_read: 500.0    # sense-amp/IV-converter read energy per sensed bit (Upton2024 Fig. 5.26, EMBER macro: VSA ~0.5 pJ/bit = sensing share of ~1 pJ/bit read @40nm; dominant current-sense read cost; IV area in v_sa0)
       i_read: 3.0         # weaker read current -> slower settle
       v_sa0:  12.9        # current sense + DESTINY IV converter
       v_wdrv: 30.0        # resistive SET/RESET needs wide HV write drivers
@@ -223,7 +223,7 @@ configs:
     technology:
       sense_mode: current
       t_SA0:  5.0       # NVMExplorer read 1.3-19 ns; DESTINY-validated 4.83 ns (45 nm)
-      e_sa_read: 500.0  # sense-amp/IV-converter read energy per sensed bit (EMBER Fig. 5.26: VSA ~0.5 pJ/bit @40nm, dominant current-sense read cost; IV area in v_sa0)
+      e_sa_read: 500.0  # sense-amp/IV-converter read energy per sensed bit (Upton2024 Fig. 5.26, EMBER macro: VSA ~0.5 pJ/bit = sensing share of ~1 pJ/bit read @40nm; dominant current-sense read cost; IV area in v_sa0)
       i_read: 4.0       # TMR read current
       v_cell: 0.00512   # 20 F^2 (NVMExplorer 14-75 F^2, low end) @ 16 nm
       v_sa0:  12.9      # 0.141 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
@@ -236,7 +236,7 @@ configs:
     technology:
       sense_mode: current
       t_SA0:  4.0       # NVMExplorer read 1.4-11 ns; DESTINY-validated 3.8 ns (SLC)
-      e_sa_read: 500.0  # sense-amp/IV-converter read energy per sensed bit (EMBER Fig. 5.26: VSA ~0.5 pJ/bit @40nm, dominant current-sense read cost; IV area in v_sa0)
+      e_sa_read: 500.0  # sense-amp/IV-converter read energy per sensed bit (Upton2024 Fig. 5.26, EMBER macro: VSA ~0.5 pJ/bit = sensing share of ~1 pJ/bit read @40nm; dominant current-sense read cost; IV area in v_sa0)
       i_read: 5.0
       v_cell: 0.00512   # 20 F^2 (NVMExplorer single point) @ 16 nm
       v_sa0:  12.9      # 0.141 latch + DESTINY IV converter (50000 F^2 = 12.8 um^3)
@@ -248,7 +248,7 @@ configs:
     technology:
       sense_mode: current
       t_SA0:  0.3       # latch floor; read time is settling-dominated (EMBER ~5 ns)
-      e_sa_read: 500.0  # sense-amp/IV-converter read energy per sensed bit (EMBER Fig. 5.26: VSA ~0.5 pJ/bit @40nm, dominant current-sense read cost; IV area in v_sa0)
+      e_sa_read: 500.0  # sense-amp/IV-converter read energy per sensed bit (Upton2024 Fig. 5.26, EMBER macro: VSA ~0.5 pJ/bit = sensing share of ~1 pJ/bit read @40nm; dominant current-sense read cost; IV area in v_sa0)
       i_read: 3.0       # 1T1R access-limited read current
       t_sw:   0.05      # 1T1R access + bleed-path selector
       v_cell: 0.00307   # 12 F^2 (NVMExplorer 4-53 F^2, 1T1R access-limited) @ 16 nm
@@ -267,7 +267,7 @@ configs:
     technology:
       sense_mode: current
       t_SA0:  0.3       # latch floor; sneak-path settling carries the read time
-      e_sa_read: 500.0  # sense-amp/IV-converter read energy per sensed bit (EMBER Fig. 5.26: VSA ~0.5 pJ/bit @40nm, dominant current-sense read cost; IV area in v_sa0)
+      e_sa_read: 500.0  # sense-amp/IV-converter read energy per sensed bit (Upton2024 Fig. 5.26, EMBER macro: VSA ~0.5 pJ/bit = sensing share of ~1 pJ/bit read @40nm; dominant current-sense read cost; IV area in v_sa0)
       i_read: 2.0       # weak crosspoint read current (sneak paths)
       t_sw:   0.1       # 2-terminal selector nonlinearity (no access transistor)
       v_cell: 0.001024  # 4 F^2 (NVSim cross-point 0T1R/1D1R) @ 16 nm
