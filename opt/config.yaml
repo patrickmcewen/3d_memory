@@ -16,12 +16,24 @@ defaults:
   problem:
     C:       100.0e9      # target capacity                 [bit]  (~800 Gbit)
     A:       800.0e6    # footprint (area per layer)      [um^2]
-    L:       8          # layer budget                    [layers]
+    L:       128          # layer budget                    [layers]
     t_layer: 1.0        # physical thickness per layer    [um]
     # Cooling power-density budget. 1 W/mm^2 == 1 uW/um^2 (the model's unit),
     # so P_max is numerically identical in both. Presets: 0.4 air / 1.1 liquid
     # (default) / 2.0 microfluidic (docs/ENERGY_MODEL_SPEC.md).
     P_max:   1.1        # power-density ceiling           [W/mm^2 == uW/um^2]
+    # Objective mode (model.py::build_model):
+    #   'bw_max' : maximize bandwidth        s.t. total capacity >= C
+    #   'cap_max': maximize capacity         s.t. per-array latency sum_dev <= t_max
+    #   'lat_min': minimize per-array latency s.t. total capacity >= C
+    # C binds in bw_max/lat_min; t_max binds in cap_max only.
+    mode:    bw_max       # 'bw_max' | 'cap_max' | 'lat_min'
+    t_max:   100.0         # per-array access-latency budget  [ns]  (cap_max only)
+    # Sustained-bandwidth floor: BW >= BW_min. 0 disables it. Binds in any mode,
+    # but is mainly for cap_max/lat_min (where BW is otherwise unconstrained).
+    # Units are model-native bit/ns: 1 bit/ns = 1.25e8 B/s = 0.125 GB/s, so
+    # e.g. 8000 = 1 TB/s.
+    BW_min:  10.0          # minimum bandwidth               [bit/ns]  (0 = off)
 
   # ---- technology / calibration coefficients ----
   # Peripheral volumes calibrated 2026-07-15 from the destiny_3d_cache submodule
@@ -101,7 +113,7 @@ defaults:
     NWL_min:    1
     NWL_max:    1000000
     Nshare_min: 1
-    Nshare_max: 100
+    Nshare_max: 1000000000000
     Nindep_max: 2.0e5
 
   # ---- optional: pin decision variables to a fixed value ----
@@ -157,6 +169,49 @@ configs:
                  shows the develop-time cost of a stricter settling fraction.
     technology:
       settle_frac: 0.999
+
+  gaincell_capmax:
+    description: Max-capacity mode for the baseline gain cell -- maximize stored
+                 capacity subject to a 50 ns per-array access-latency budget
+                 (sum_dev <= t_max). The C target is ignored in this mode.
+    problem:
+      mode:  cap_max
+      t_max: 50.0
+    technology:
+      settle_frac: 0.1  # sense-margin fraction (matches the gaincell baseline)
+      c_bl:      0.146
+      r_bl:      8.78
+      k_wire_WL: 5.88e-8
+      k_cell_WL: 2.93e-5
+
+  gaincell_latmin:
+    description: Min-latency mode for the baseline gain cell -- minimize the
+                 per-array access latency (sum_dev) subject to meeting the target
+                 capacity C. t_max is ignored in this mode.
+    problem:
+      mode: lat_min
+    technology:
+      settle_frac: 0.1  # sense-margin fraction (matches the gaincell baseline)
+      c_bl:      0.146
+      r_bl:      8.78
+      k_wire_WL: 5.88e-8
+      k_cell_WL: 2.93e-5
+
+  gaincell_capmax_minbw:
+    description: cap-max with a sustained-bandwidth floor -- maximize capacity
+                 subject to BOTH the per-array latency budget (sum_dev <= t_max)
+                 AND BW >= BW_min. Shows the capacity given up to sustain a
+                 throughput target.
+    problem:
+      mode:   cap_max
+      t_max:  50.0
+      BW_min: 100.0     # >= 100 bit/ns (= 1.25e10 B/s = 12.5 GB/s)
+    technology:
+      settle_frac: 0.1  # sense-margin fraction (matches the gaincell baseline)
+      c_bl:      0.146
+      r_bl:      8.78
+      k_wire_WL: 5.88e-8
+      k_cell_WL: 2.93e-5
 
   gaincell_big_footprint:
     description: Baseline gain cell on a 2x larger footprint (more volume for
@@ -303,3 +358,77 @@ configs:
       k_wire_WL: 1.13e-8 # WL wire self-RC, SRAM-anchor scaled by pitch^2 = v_cell/0.0374 (very short WL on a tiny cell; xvalidate)
       k_cell_WL: 1.28e-5 # WL per-cell gate load, scaled by cell pitch sqrt(v_cell/0.0374)
       # v_sa0 inherits the destiny_3d_cache voltage-latch default (0.141)
+
+  # =====================================================================
+  # CACTI cross-validation targets (added 2026-07-15).
+  #
+  # The *_dest configs above are calibrated against DESTINY. CACTI (v7.0.3DD)
+  # models a DIFFERENT circuit family -- only bulk-CMOS SRAM and commodity/low-
+  # power DRAM (no ReRAM/MRAM/PCM/FeFET). These `*_cacti` entries are the
+  # single-subarray calibration targets for opt/xvalidate/xvalidate_cacti.py:
+  # start as clones of the nearest _dest point, then tune the model coefficients
+  # here until the per-component ratios in that harness's report close to ~1.0x
+  # -- exactly the workflow the DESTINY harness uses. Keeping them SEPARATE from
+  # the _dest configs means neither model's calibration perturbs the other.
+  #
+  # Node: CACTI's usable floor is 22 nm (16 nm.dat is rejected as "Invalid
+  # technology nodes"), same as DESTINY -- so both cross-checks share the
+  # F=22-vs-16 cell-pitch caveat. Cell mapping lives in tech_map_cacti.py.
+  # =====================================================================
+
+  sram_cacti:
+    description: 6T SRAM, voltage latch sense -- CACTI itrs-hp cell cross-check.
+                 Seeded from sram_dest; TUNED 2026-07-15 to CACTI (itrs-hp @ 22 nm)
+                 via xvalidate_cacti.py -- latency/energy/area all land ~1.0x over
+                 a 256..4096-row x 256..1024-col sweep. Overrides below are the
+                 CACTI-anchored values (vs sram_dest's DESTINY-anchored ones).
+    technology:
+      sense_mode: voltage
+      settle_frac: 0.1  # sense-margin fraction; latch fires at the margin
+      t_SA0:  0.0019    # CACTI reports 1.90 ps SA delay @22nm (was 2.66 -> 1.40x high)
+      v_cell: 0.0374    # 146 F^2 6T SRAM @ 16 nm (matches sram_dest; area already 0.98-1.05x)
+      # bitline latency was a flat 1.4x too high (shape correct) -> scale the voltage
+      # divider so a_lin/a_quad drop; 0.23 lands t_BL at 0.99-1.05x over 256..2048 rows.
+      v_ratio: 0.23
+      # bitline+cell energy was ~1.6-1.9x high: k_arr=c_bl*v_read*v_sense per-row term
+      # (v_sense 0.1->0.0645) + kill the k_col=c_cell*v2 offset (c_cell 25->1.3, the
+      # per-bitline cell cap for a latch read, not a storage cap here).
+      v_sense: 0.0645
+      c_cell:  1.3
+      # periph energy was a flat ~4x low, entirely in the per-column slope (intercept
+      # e_periph/e_sa_read were fine) -> raise e_periph_col 0.75->3.2 (CACTI output
+      # driver + precharge dominate its per-column periphery).
+      e_periph_col: 3.2
+      # v_sa0 inherits the voltage-latch default (0.141)
+
+  dram_cacti:
+    description: Commodity 1T1C DRAM, passive charge-share read -- CACTI comm-dram
+                 cell cross-check. Seeded from dram_100Mb. PARTIALLY tuned to CACTI
+                 2026-07-15 -- periph energy closed via e_periph_col; the remaining
+                 CACTI residuals (senseamp latency, decode-vs-rows scaling, cell
+                 area) are STRUCTURAL/definitional, not coefficient-closable -- see
+                 the block comment below and opt/xvalidate/README.md.
+    technology:
+      sense_mode: charge_share
+      destructive: 1
+      t_SA0:     0.25
+      t_restore: 1.2
+      c_cell:    25.0     # ~25 fF storage cap (JEDEC DRAM design target)
+      v_cell:    0.012    # dense 1T1C bitcell -- NOT tuned down to CACTI's ~2 F^2 planar
+                          # footprint on purpose: v_cell is a 3D VOLUME/bit and must carry
+                          # the vertical trench/stack capacitor, which CACTI's planar area
+                          # omits. So model cell area SHOULD exceed CACTI's here (unlike the
+                          # planar SRAM cell, which matched to 0.98x). See README structural note.
+      v_wdrv:    0.0      # charge-share writes back through the sense amp
+      # periph energy was ~4x low, entirely in the per-column slope (same mechanism
+      # as sram_cacti): CACTI's per-column DRAM periphery (sense/precharge/mux) is
+      # larger than the DESTINY-anchored default. 0.75->3.9 lands periph ~1.0x.
+      e_periph_col: 3.9
+      # NOTE (structural, do NOT try to coefficient-fix):
+      #  * senseamp: model t_SA folds t_restore (write-back) into the read path
+      #    (t_SA0+t_restore=1450 ps) because sharing amortizes a FULL destructive
+      #    cycle; CACTI's "Sense Amp delay" leaf is the ~6 ps sensing ALONE (restore
+      #    lives in tRC, off the read-data path). Different bucket definitions -> the
+      #    237x ratio is not a bad coefficient. Model TOTAL(dev) still lands ~0.8-1.1x.
+      #  * decode+WL: model decode is log-depth in rows; CACTI's grows ~quadratically
+      #    with rows in a flat forced subarray (see sram_cacti -- same gap, worse here).

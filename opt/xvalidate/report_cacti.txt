@@ -1,0 +1,225 @@
+
+=== sram_cacti  [CACTI cell: itrs-hp @ 22 nm]   subarray 256 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]           CACTI       model   model/CAC
+  decode+WL             105.91      177.45       1.68x
+  bitline                85.14       79.07       0.93x
+  senseamp                1.90        1.90       1.00x
+  TOTAL(dev)            192.95      265.42       1.38x
+  (h-tree*)              26.67          --    overhead
+  ENERGY [fJ/bit]        CACTI       model   model/CAC
+  bitline+cell           13.59       13.55       1.00x
+  periph                 13.69       14.13       1.03x
+  TOTAL(access)          27.28       27.67       1.01x
+  AREA [um^3]            CACTI       model   model/CAC
+  array(cells)       1920.4013   2451.0464       1.28x
+  TOTAL(subarray)    2564.2926   2724.7604       1.06x
+
+=== sram_cacti  [CACTI cell: itrs-hp @ 22 nm]   subarray 512 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]           CACTI       model   model/CAC
+  decode+WL             181.45      197.45       1.09x
+  bitline               160.14      137.42       0.86x
+  senseamp                1.90        1.90       1.00x
+  TOTAL(dev)            343.49      343.77       1.00x
+  (h-tree*)              26.67          --    overhead
+  ENERGY [fJ/bit]        CACTI       model   model/CAC
+  bitline+cell           26.78       26.75       1.00x
+  periph                 13.91       14.13       1.02x
+  TOTAL(access)          40.69       40.88       1.00x
+  AREA [um^3]            CACTI       model   model/CAC
+  array(cells)       4148.0922   4902.0928       1.18x
+  TOTAL(subarray)    5128.5727   5397.7588       1.05x
+
+=== sram_cacti  [CACTI cell: itrs-hp @ 22 nm]   subarray 1024 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]           CACTI       model   model/CAC
+  decode+WL             426.04      217.45       0.51x
+  bitline               323.76      261.59       0.81x
+  senseamp                1.90        1.90       1.00x
+  TOTAL(dev)            751.70      487.94       0.65x
+  (h-tree*)              26.67          --    overhead
+  ENERGY [fJ/bit]        CACTI       model   model/CAC
+  bitline+cell           53.16       53.17       1.00x
+  periph                 14.34       14.13       0.99x
+  TOTAL(access)          67.49       67.30       1.00x
+  AREA [um^3]            CACTI       model   model/CAC
+  array(cells)       8645.5075   9804.1856       1.13x
+  TOTAL(subarray)   10257.1767  10743.7556       1.05x
+
+=== sram_cacti  [CACTI cell: itrs-hp @ 22 nm]   subarray 2048 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]           CACTI       model   model/CAC
+  decode+WL            1341.22      237.45       0.18x
+  bitline               706.08      552.80       0.78x
+  senseamp                1.90        1.90       1.00x
+  TOTAL(dev)           2049.19      799.15       0.39x
+  (h-tree*)              26.67          --    overhead
+  ENERGY [fJ/bit]        CACTI       model   model/CAC
+  bitline+cell          105.91      106.01       1.00x
+  periph                 15.18       14.13       0.93x
+  TOTAL(access)         121.09      120.14       0.99x
+  AREA [um^3]            CACTI       model   model/CAC
+  array(cells)      17663.8224  19608.3712       1.11x
+  TOTAL(subarray)   20514.3533  21435.7492       1.04x
+
+=== sram_cacti  [CACTI cell: itrs-hp @ 22 nm]   subarray 4096 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]           CACTI       model   model/CAC
+  decode+WL            4716.99      257.45       0.05x
+  bitline              1691.62     1316.37       0.78x
+  senseamp                1.90        1.90       1.00x
+  TOTAL(dev)           6410.51     1582.72       0.25x
+  (h-tree*)              26.67          --    overhead
+  ENERGY [fJ/bit]        CACTI       model   model/CAC
+  bitline+cell          211.42      211.69       1.00x
+  periph                 16.83       14.13       0.84x
+  TOTAL(access)         228.25      225.82       0.99x
+  AREA [um^3]            CACTI       model   model/CAC
+  array(cells)      35364.6782  39216.7424       1.11x
+  TOTAL(subarray)   41028.8314  42819.7364       1.04x
+
+=== sram_cacti  [CACTI cell: itrs-hp @ 22 nm]   subarray 256 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]           CACTI       model   model/CAC
+  decode+WL             248.24      316.30       1.27x
+  bitline               193.95      186.75       0.96x
+  senseamp                1.90        1.90       1.00x
+  TOTAL(dev)            444.08      511.95       1.15x
+  (h-tree*)              85.84          --    overhead
+  ENERGY [fJ/bit]        CACTI       model   model/CAC
+  bitline+cell           54.36       54.18       1.00x
+  periph                 52.16       52.53       1.01x
+  TOTAL(access)         106.89      106.71       1.00x
+  AREA [um^3]            CACTI       model   model/CAC
+  array(cells)       8122.0378   9804.1856       1.21x
+  TOTAL(subarray)   10257.1704  10187.7236       0.99x
+
+=== sram_cacti  [CACTI cell: itrs-hp @ 22 nm]   subarray 512 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]           CACTI       model   model/CAC
+  decode+WL             323.88      336.30       1.04x
+  bitline               277.73      279.73       1.01x
+  senseamp                1.90        1.90       1.00x
+  TOTAL(dev)            603.51      624.93       1.04x
+  (h-tree*)              85.84          --    overhead
+  ENERGY [fJ/bit]        CACTI       model   model/CAC
+  bitline+cell          107.11      107.02       1.00x
+  periph                 52.38       52.53       1.00x
+  TOTAL(access)         159.86      159.55       1.00x
+  AREA [um^3]            CACTI       model   model/CAC
+  array(cells)      17587.5376  19608.3712       1.11x
+  TOTAL(subarray)   20514.2910  20213.8612       0.99x
+
+=== sram_cacti  [CACTI cell: itrs-hp @ 22 nm]   subarray 1024 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]           CACTI       model   model/CAC
+  decode+WL             568.61      356.30       0.63x
+  bitline               441.47      442.29       1.00x
+  senseamp                1.90        1.90       1.00x
+  TOTAL(dev)           1011.98      807.50       0.80x
+  (h-tree*)              85.84          --    overhead
+  ENERGY [fJ/bit]        CACTI       model   model/CAC
+  bitline+cell          212.62      212.70       1.00x
+  periph                 52.80       52.53       0.99x
+  TOTAL(access)         265.80      265.22       1.00x
+  AREA [um^3]            CACTI       model   model/CAC
+  array(cells)      36700.0550  39216.7424       1.07x
+  TOTAL(subarray)   41028.7067  40266.1364       0.98x
+
+=== sram_cacti  [CACTI cell: itrs-hp @ 22 nm]   subarray 2048 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]           CACTI       model   model/CAC
+  decode+WL            1484.00      376.30       0.25x
+  bitline               823.96      770.61       0.94x
+  senseamp                1.90        1.90       1.00x
+  TOTAL(dev)           2309.85     1155.82       0.50x
+  (h-tree*)              85.84          --    overhead
+  ENERGY [fJ/bit]        CACTI       model   model/CAC
+  bitline+cell          423.64      424.05       1.00x
+  periph                 53.64       52.53       0.98x
+  TOTAL(access)         477.66      476.58       1.00x
+  AREA [um^3]            CACTI       model   model/CAC
+  array(cells)      75031.0832  78433.4848       1.05x
+  TOTAL(subarray)   82057.4134  80370.6868       0.98x
+
+=== sram_cacti  [CACTI cell: itrs-hp @ 22 nm]   subarray 4096 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]           CACTI       model   model/CAC
+  decode+WL            4860.04      396.30       0.08x
+  bitline              1809.73     1563.60       0.86x
+  senseamp                1.90        1.90       1.00x
+  TOTAL(dev)           6671.67     1968.80       0.30x
+  (h-tree*)              85.84          --    overhead
+  ENERGY [fJ/bit]        CACTI       model   model/CAC
+  bitline+cell          845.69      846.76       1.00x
+  periph                 55.30       52.53       0.95x
+  TOTAL(access)         901.36      899.28       1.00x
+  AREA [um^3]            CACTI       model   model/CAC
+  array(cells)     151356.3438 156866.9696       1.04x
+  TOTAL(subarray)  164115.3257 160579.7876       0.98x
+
+=== dram_cacti  [CACTI cell: comm-dram @ 22 nm]   subarray 256 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]           CACTI       model   model/CAC
+  decode+WL             825.01      177.45       0.22x
+  bitline              2051.08      749.93       0.37x
+  senseamp                6.12     1450.00     237.02x
+  TOTAL(dev)           2882.20     2384.38       0.83x
+  (h-tree*)              21.86          --    overhead
+  ENERGY [fJ/bit]        CACTI       model   model/CAC
+  bitline+cell           57.90      304.80       5.26x
+  periph                 16.34       16.93       1.04x
+  TOTAL(access)          74.25      321.73       4.33x
+  AREA [um^3]            CACTI       model   model/CAC
+  array(cells)         17.6464    786.4320      44.57x
+  TOTAL(subarray)      68.0919   1056.9460      15.52x
+
+=== dram_cacti  [CACTI cell: comm-dram @ 22 nm]   subarray 512 rows x 256 cols (b_acc=64, mux=4) ===
+  LATENCY [ps]           CACTI       model   model/CAC
+  decode+WL             831.45      197.45       0.24x
+  bitline              2569.57     2190.64       0.85x
+  senseamp                8.07     1450.00     179.70x
+  TOTAL(dev)           3409.09     3845.08       1.13x
+  (h-tree*)              21.86          --    overhead
+  ENERGY [fJ/bit]        CACTI       model   model/CAC
+  bitline+cell          108.12      509.60       4.71x
+  periph                 16.40       16.93       1.03x
+  TOTAL(access)         124.52      526.53       4.23x
+  AREA [um^3]            CACTI       model   model/CAC
+  array(cells)         50.1331   1572.8640      31.37x
+  TOTAL(subarray)     136.1838   2065.3300      15.17x
+
+=== dram_cacti  1024x256: SKIPPED (CACTI built no valid array for dram_cacti_1024x256:)
+
+=== dram_cacti  2048x256: SKIPPED (CACTI built no valid array for dram_cacti_2048x256:)
+
+=== dram_cacti  4096x256: SKIPPED (CACTI built no valid array for dram_cacti_4096x256:)
+
+=== dram_cacti  [CACTI cell: comm-dram @ 22 nm]   subarray 256 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]           CACTI       model   model/CAC
+  decode+WL            3565.13      316.30       0.09x
+  bitline              3587.47      979.79       0.27x
+  senseamp                6.12     1450.00     237.02x
+  TOTAL(dev)           7158.72     2753.09       0.38x
+  (h-tree*)              52.40          --    overhead
+  ENERGY [fJ/bit]        CACTI       model   model/CAC
+  bitline+cell          231.62     1219.20       5.26x
+  periph                 63.15       63.73       1.01x
+  TOTAL(access)         294.91     1282.93       4.35x
+  AREA [um^3]            CACTI       model   model/CAC
+  array(cells)         93.0026   3145.7280      33.82x
+  TOTAL(subarray)     272.3676   3526.0660      12.95x
+
+=== dram_cacti  [CACTI cell: comm-dram @ 22 nm]   subarray 512 rows x 1024 cols (b_acc=64, mux=16) ===
+  LATENCY [ps]           CACTI       model   model/CAC
+  decode+WL            3571.63      336.30       0.09x
+  bitline              4118.37     2448.75       0.59x
+  senseamp                8.07     1450.00     179.70x
+  TOTAL(dev)           7698.07     4242.05       0.55x
+  (h-tree*)              52.40          --    overhead
+  ENERGY [fJ/bit]        CACTI       model   model/CAC
+  bitline+cell          432.50     2038.40       4.71x
+  periph                 63.21       63.73       1.01x
+  TOTAL(access)         495.84     2102.13       4.24x
+  AREA [um^3]            CACTI       model   model/CAC
+  array(cells)        266.6277   6291.4560      23.60x
+  TOTAL(subarray)     544.7352   6893.7460      12.66x
+
+=== dram_cacti  1024x1024: SKIPPED (CACTI built no valid array for dram_cacti_1024x1024:)
+
+=== dram_cacti  2048x1024: SKIPPED (CACTI built no valid array for dram_cacti_2048x1024:)
+
+=== dram_cacti  4096x1024: SKIPPED (CACTI built no valid array for dram_cacti_4096x1024:)
+
+wrote /nfs/pool0/pmcewen/rsgvm13dir/codesign2/memory/3d_memory/opt/xvalidate/comparison_cacti.csv
+wrote /nfs/pool0/pmcewen/rsgvm13dir/codesign2/memory/3d_memory/opt/xvalidate/report_cacti.txt

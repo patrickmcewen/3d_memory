@@ -1,0 +1,16 @@
+CACTI-3DD 3D-DRAM area-efficiency cross-check  (model config: dram_cacti)
+NOTE: chip-level timing/energy excluded (cacti-3DD build overflow); TSV area is reference-only (no model PDN term yet).
+
+=== dram_cacti 2 dies: SKIPPED (CACTI-3DD gave no 3D array for comm-dram_8Gb_2die:)
+
+=== dram_cacti  [CACTI-3DD cell: comm-dram @ 50 nm]  4 dies x 8 banks, subarray 512 rows x 1024 cols ===
+  AREA EFFICIENCY          CACTI-3DD       model   model/CAC
+  cells/total array           45.13%      91.26%       2.02x
+  -- 3D reference (no model counterpart yet) --
+     DRAM area / die     : 82.711 mm2
+     TSV area overhead   : 0.2352 mm2  (0.28% of die)
+     t_RCD (raw)         : 1.15e+107 ns  <-- UNRELIABLE (cacti-3DD TSV/membus overflow)
+
+=== dram_cacti 8 dies: SKIPPED (CACTI-3DD gave no 3D array for comm-dram_8Gb_8die:)
+
+wrote /nfs/pool0/pmcewen/rsgvm13dir/codesign2/memory/3d_memory/opt/xvalidate/report_cacti3dd.txt

@@ -39,7 +39,7 @@ DEFAULT_GUROBI = Path(
 # Every param the model declares, by block. Used to assert a config is complete
 # (fail loud on a missing/extra key) before constructing the dataclass specs.
 PARAMS = {
-    "problem": ["C", "A", "L", "t_layer", "P_max"],
+    "problem": ["C", "A", "L", "t_layer", "P_max", "mode", "t_max", "BW_min"],
     "technology": ["k_dec", "k_wire_WL", "k_cell_WL", "t_SA0", "t_restore",
                    "destructive", "t_sw", "v_cell", "v_sa0", "v_wdrv", "v_pass",
                    "v_pre", "v_wldrv", "v_sel",
@@ -52,7 +52,7 @@ PARAMS = {
                "Nshare_min", "Nshare_max", "Nindep_max"],
 }
 # Params that are NOT numeric (skip float() coercion in make_specs).
-STRING_PARAMS = {"sense_mode"}
+STRING_PARAMS = {"sense_mode", "mode"}
 # fix-key -> (min_param, max_param) bound pair it collapses.
 FIXABLE = {
     "N_BL":    ("NBL_min", "NBL_max"),
@@ -143,6 +143,9 @@ def collect_values(m, problem: ProblemSpec, tech: TechSpec) -> dict:
     d["vol_budget"] = problem.vol_budget
     d["vol_pct"] = 100 * vol_used / problem.vol_budget
     d["C"] = problem.C
+    d["mode"] = problem.mode
+    d["t_max"] = problem.t_max
+    d["BW_min"] = problem.BW_min
     d["t_sw"] = tech.t_sw
     d["sense_mode"] = tech.sense_mode
     # Power density [uW/um^2 == W/mm^2] over the shared 3D footprint A_used.
@@ -185,7 +188,11 @@ def print_report(name: str, v: dict) -> None:
 
     BW is solved in bit/ns; 1 bit/ns = 1.25e8 B/s.
     """
-    print("\n================= 3d_memory :: BW-max design point =================")
+    bw_obj = v['mode'] == "bw_max"
+    cap_obj = v['mode'] == "cap_max"
+    lat_obj = v['mode'] == "lat_min"
+    title = {"bw_max": "BW-max", "cap_max": "cap-max", "lat_min": "latency-min"}[v['mode']]
+    print(f"\n================= 3d_memory :: {title} design point =================")
     print("  ------------------------------------------------------------------")
     print("  all input parameters (ProblemSpec):")
     for name, val in v['problem_inputs'].items():
@@ -198,7 +205,17 @@ def print_report(name: str, v: dict) -> None:
     for name, val in v['all_vars'].items():
         print(f"    {name:<16} = {val:.6g}")
     print("  ------------------------------------------------------------------")
-    print(f"  objective  BW        = {v['BW'] * 1.25e8:12.4g}  B/s   ({v['BW'] * 0.125e-3:.4g} TB/s)")
+    bw_floor = v['BW_min'] > 0
+    if bw_obj:
+        bw_tag, bw_note = "(objective)", ""
+    elif bw_floor:
+        bw_tag = "         "
+        bw_note = (f"   [constraint: BW >= BW_min = {v['BW_min'] * 1.25e8:.4g} B/s "
+                   f"({v['BW_min']:.4g} bit/ns), {100 * v['BW_min'] / v['BW']:.1f}% of solved]")
+    else:
+        bw_tag, bw_note = "         ", f"   [aux: t_cycle unoptimized in {title}]"
+    print(f"  BW {bw_tag}        = {v['BW'] * 1.25e8:12.4g}  B/s   ({v['BW'] * 0.125e-3:.4g} TB/s)"
+          + bw_note)
     print(f"  cycle time t_cycle    = {v['t_cycle']:12.4g}  ns")
     print("  ------------------------------------------------------------------")
     print(f"  array   N_BL x N_WL   = {v['N_BL']:8.1f} x {v['N_WL']:<8.1f}  (K = N_BL/b_acc = {v['N_BL'] / v['b_acc']:.2f})")
@@ -210,12 +227,19 @@ def print_report(name: str, v: dict) -> None:
     print("  ------------------------------------------------------------------")
     print(f"  t_dec / t_WL / t_BL   = {v['t_dec']:.4g} / {v['t_WL']:.4g} / {v['t_BL']:.4g} ns")
     print(f"  t_SA+t_sw (floor)     = {v['t_SA'] + v['t_sw']:.4g} ns   develop sum = {v['sum_dev']:.4g} ns")
-    print(f"  single-array t_cycle  = {v['sum_dev']:12.4g}  ns   (before N_share amortization)")
+    if cap_obj:
+        lat_tag = f"  (constraint: sum_dev <= t_max = {v['t_max']:.4g} ns, {100 * v['sum_dev'] / v['t_max']:.1f}%)"
+    elif lat_obj:
+        lat_tag = "  (objective: minimized)"
+    else:
+        lat_tag = "  (before N_share amortization)"
+    print(f"  single-array t_cycle  = {v['sum_dev']:12.4g}  ns {lat_tag}")
     print("  ------------------------------------------------------------------")
     print(f"  volume used / budget  = {v['vol_used']:.4g} / {v['vol_budget']:.4g} um^3  ({v['vol_pct']:.1f}%)")
     print(f"    arrays = {v['vol_arrays']:.4g}   SA = {v['vol_sas']:.4g}   wdrv = {v['vol_wdrv']:.4g}   BL-strip = {v['vol_bl']:.4g}   WL-strip = {v['vol_wl']:.4g}   sel = {v['vol_sel']:.4g}   periph = {v['vol_periph']:.4g} um^3")
     print(f"    n_arrays (N_tot)      = {v['N_tot']:.4g}")
-    print(f"  capacity  stored/target = {v['total_cells']:.4g} / {v['C']:.4g} bit")
+    cap_tag = "(objective)" if cap_obj else "(constraint: >= C)"
+    print(f"  capacity  stored/target = {v['total_cells']:.4g} / {v['C']:.4g} bit  {cap_tag}")
     print("  ------------------------------------------------------------------")
     print(f"  energy/access E_access = {v['E_access']:.4g}  fJ   (overfetch K = N_BL/b_acc = {v['overfetch']:.2f})")
     print(f"    bitcell CV^2 = {v['e_bitcell']:.4g} fJ ({100 * v['e_bitcell'] / v['E_access']:.1f}%)"

@@ -1,3 +1,21 @@
+# Model cross-validation harnesses
+
+Three harnesses compare `opt/model.py` against independent memory modeling tools
+at an identical array geometry, to see *how big* the mismatch is and *which
+component* it comes from — attribution tools that drive per-config calibration:
+
+| harness | tool | scope | configs |
+|---|---|---|---|
+| `xvalidate.py` | DESTINY (`../../destiny_3d_cache`) | single subarray, all cell types | `*_dest` etc. |
+| `xvalidate_cacti.py` | CACTI (`../../cacti`) | single subarray, SRAM + DRAM only | `*_cacti`, `*_dest` SRAM/DRAM |
+| `xvalidate_cacti3dd.py` | CACTI-3DD (`../../cacti-3DD`) | 3D-DRAM die-level area efficiency | `dram_cacti` etc. |
+
+The `*_cacti` configs in `config.yaml` are the CACTI calibration targets, kept
+separate from the DESTINY-calibrated `*_dest` configs so neither tool's
+calibration perturbs the other.
+
+---
+
 # DESTINY cross-validation harness
 
 Compares `opt/model.py`'s **single-subarray** timing/energy against DESTINY
@@ -130,3 +148,155 @@ converter per sensed bit). Current-sense configs set it to EMBER's measured VSA
   arrays. DESTINY's ReRAM bitline (16 fJ) is 275× below its own MRAM number —
   the Seevinck-ported-to-resistive underestimate Upton calls out (App. A p130),
   so we go with Upton, cite `[upton2024, ember]`, and do NOT cite DESTINY here.
+
+---
+
+# CACTI cross-validation harness (`xvalidate_cacti.py`)
+
+Same idea as the DESTINY harness, against **CACTI v7.0.3DD** (`../../cacti`, build
+with `make`). CACTI models only bulk-CMOS **SRAM** and commodity/low-power
+**DRAM** — no ReRAM/MRAM/PCM/FeFET — so it covers the SRAM/DRAM configs; the
+emerging-memory configs stay DESTINY-only.
+
+```
+opt/.venv/bin/python opt/xvalidate/xvalidate_cacti.py                       # all CACTI-mapped configs
+opt/.venv/bin/python opt/xvalidate/xvalidate_cacti.py --configs sram_cacti dram_cacti
+opt/.venv/bin/python opt/xvalidate/xvalidate_cacti.py --rows 256 512 --cols 256 --b-acc 64
+```
+
+Writes per-point tables + `comparison_cacti.csv` + `report_cacti.txt`; forced
+`.cfg`s land in `_work_cacti/`.
+
+## Forcing one subarray (`tech_map_cacti.py`)
+
+CACTI's smallest valid data organization is a **2×2-subarray mat**, so we force
+`Ndwl=Ndbl=2, Nspd=1` and one sense-amp column-mux stage
+(`Ndcm=1, Ndsam1=n_col/b_acc, Ndsam2=1`), with the mat output width
+`out_w = (Ndwl·Ndbl)·b_acc = 4·b_acc`. That builds four subarrays of exactly
+`n_row × n_col`. Derivation (CACTI [parameter.cc] data-array branch):
+`cols = 8·block_bytes/Ndwl`, `rows = size_bytes/(block_bytes·Ndbl)` ⇒
+`block = n_col/4 B`, `size = n_row·n_col/2 B`. The harness asserts CACTI's
+reported `Best Ndwl/Ndbl/Ndsam L1` match the request.
+
+Unlike the DESTINY map, we do **not** inject cell physics — CACTI's cell is fixed
+by (cell-type, node). Node is CACTI's **22 nm** floor (16 nm.dat is rejected as
+*Invalid technology nodes*), same as DESTINY, so both share the F=22-vs-16 caveat.
+
+## Component buckets (CACTI ↔ model)
+
+| bucket | CACTI stdout | model |
+|---|---|---|
+| decode+WL (ps) | `Decoder + wordline delay` | `t_dec + t_WL` |
+| bitline (ps) | `Bitline delay` | `t_BL` |
+| senseamp (ps) | `Sense Amplifier delay` | `t_SA` |
+| TOTAL(dev) (ps) | sum of the three (excl. H-tree) | `sum_dev` |
+| bitline+cell (fJ/bit) | `Bitlines` / out_w | `e_bitline` / b_acc |
+| periph (fJ/bit) | (decoder+wordline+precharge+SA+muxes+output driver) / out_w | `e_periph` / b_acc |
+| TOTAL(access) (fJ/bit) | `Total dynamic read energy/access` / out_w | `E_access` / b_acc |
+| array(cells) / TOTAL (µm³) | `Subarray H×L` × (efficiency) → 16 nm volume | `v_cell·cells` / `vol` |
+
+**Energy is compared per delivered bit** (energy/access ÷ bits/access), which is
+count-invariant — it sidesteps how many of the 4 subarrays a mat access
+activates. **Latency** is the per-subarray critical path (directly comparable).
+**Area** uses CACTI's reported per-subarray dimensions. H-tree in/out latency is
+reported separately as interconnect overhead the single-subarray model omits
+(like DESTINY's Non-H-Tree residual). Infeasible forced points print `SKIPPED`.
+
+## Calibration workflow
+
+`sram_cacti` / `dram_cacti` start as clones of the nearest `*_dest` point. Run
+the harness, then tune those configs' model coefficients until the `model/CAC`
+ratios close to ~1.0×.
+
+### Tuned results (2026-07-15)
+
+**`sram_cacti`** — tuned to CACTI `itrs-hp` @ 22 nm over a 256–4096-row ×
+256–1024-col sweep. Overrides: `t_SA0` 0.00266→0.0019, `v_ratio` 0.4→0.23,
+`v_sense` 0.1→0.0645, `c_cell` 25→1.3, `e_periph_col` 0.75→3.2. Result:
+
+| bucket | model/CAC | notes |
+|---|---|---|
+| senseamp | **1.00×** | `t_SA0` = CACTI SA latency |
+| bitline latency | 0.78–1.05× | shape correct; mild under-model only at ≥2048 rows |
+| bitline+cell energy | **1.00×** | every geometry |
+| periph energy | 0.84–1.03× | per-column slope (`e_periph_col`) was the whole gap |
+| area (subarray) | 0.98–1.06× | untouched; already matched |
+| **decode+WL latency** | **1.7× → 0.05×** | *shape mismatch — see below; no coefficient fixes it* |
+
+**`dram_cacti`** — only `e_periph_col` (0.75→3.9) is a clean coefficient fix
+(periph energy 0.25×→**1.0×**). The other DRAM residuals are **structural /
+definitional**, not coefficient-closable, and are left as-is (documented in
+`config.yaml`):
+
+- **senseamp 180–237×** — the model folds `t_restore` (write-back) into `t_SA`
+  because peripheral *sharing* amortizes a full destructive cycle; CACTI's "Sense
+  Amp delay" leaf is the ~6 ps sensing alone (restore is in `tRC`, off the
+  read-data path). Different bucket definitions. Model `TOTAL(dev)` still ~0.8–1.1×.
+- **cell area 13–45×** — `v_cell` is a 3D **volume**/bit carrying the vertical
+  trench/stack capacitor; CACTI reports a planar **footprint** (~2 F²) that omits
+  it. Model area *should* exceed CACTI here (the planar SRAM cell matched to 0.98×).
+- **bitline+cell energy ~4.7–5.3×** — a destructive read restores at the full rail
+  (`v_read²`); CACTI's comm-dram bitline-energy leaf reflects a half-rail
+  (Vdd/2-precharge) swing + a lower cell/BL cap. Partly convention, partly cap.
+
+### The one `decode+WL` shape divergence — and why it is NOT a model bug
+
+After coefficient tuning this is the **only** bucket whose *shape* (not just
+magnitude) disagrees with CACTI. Holding columns fixed and sweeping rows, CACTI's
+`Decoder + wordline delay` grows **super-linearly** (~quadratically) with row
+count — e.g. SRAM @1024 cols: 248→324→569→1484→4860 ps over 256→512→…→4096 rows —
+while the model's decode is `k_dec·log₂(N_WL)` (log in rows) plus a `t_WL` term
+that depends only on **columns**, so it is nearly flat in rows (0.05× at 4096).
+
+**Cross-checked against DESTINY, the model is correct and CACTI is the outlier.**
+Running the same row sweep through the DESTINY harness (`xvalidate.py`,
+`gaincell_100Mb` SRAM @1024 cols), DESTINY's `decode+WL` is *also* flat in rows —
+283→290→302 ps over 512→1024→2048 rows — and the model tracks it at **0.96–1.03×**.
+Two independent facts point the same way:
+
+- a row decoder **is** log-depth, and a real design pipelines/buffers it and folds
+  tall arrays into a bank hierarchy, keeping decode ~flat in per-subarray rows;
+- CACTI's super-linear growth comes from evaluating a **single forced flat org** it
+  cannot buffer or bank — its decode RC blows up precisely because we forced away
+  the hierarchy it would otherwise build.
+
+So **no `model.py` change is warranted for decode scaling.** The divergence is an
+artifact of the single-subarray forcing recipe (the same reason we exclude CACTI's
+H-tree), not a missing term. Do NOT add a row-direction decode term — it would
+penalize tall subarrays in the BW-max optimizer against the DESTINY evidence.
+
+*(This is why the tuning targets the energy/bitline/senseamp/area buckets, which
+agree in shape across BOTH tools, and does not chase `decode+WL` toward CACTI.)*
+
+---
+
+# CACTI-3DD cross-validation harness (`xvalidate_cacti3dd.py`)
+
+Drives **CACTI-3DD** (`../../cacti-3DD`) in its 3D-DRAM mode (a stacked-die
+commodity-DRAM chip) and cross-checks the one quantity the two models robustly
+share at that level: **data-array area efficiency** (cell area / total array
+area) — how much the peripheral circuitry inflates the array, which exercises the
+model's peripheral-volume coefficients in a DRAM context.
+
+```
+opt/.venv/bin/python opt/xvalidate/xvalidate_cacti3dd.py                      # dram_cacti, 2/4/8 dies
+opt/.venv/bin/python opt/xvalidate/xvalidate_cacti3dd.py --config dram_100Mb --dies 4 --size-gb 8
+```
+
+It runs CACTI-3DD unforced, reads back the subarray geometry + die area
+efficiency it built, then evaluates the model at that same subarray geometry.
+
+## Two limitations (honored, not hidden)
+
+- **Chip-level timing/energy are broken in this build.** `t_RCD/t_RAS/t_RC`, read/
+  refresh energy, and TSV latency/energy overflow to a ~`1e107` sentinel — a
+  numerical blowup in this build's TSV/membus delay path (`uca.cc delay_TSV_tot`),
+  independent of forcing. They are printed **raw and flagged UNRELIABLE**, never
+  compared. (Subarray-level area/geometry is sane, which is why efficiency works.)
+- **The model has no TSV / power-delivery-via term yet** (the PDN model is still
+  proposed). So CACTI-3DD's **TSV area overhead is reference-only** — reported for
+  future PDN calibration, with no model counterpart to ratio against.
+
+When either is resolved (patch the cacti-3DD TSV delay; add the model PDN/TSV
+term), wire the corresponding rows into the comparison — the harness already
+parses and prints them.

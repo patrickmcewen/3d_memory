@@ -23,12 +23,28 @@ import pyomo.environ as pyo
 
 @dataclass
 class ProblemSpec:
-    """Given problem inputs (AMPL ``param C, A, L, t_layer``)."""
+    """Given problem inputs (AMPL ``param C, A, L, t_layer``).
+
+    Three objective modes (see :func:`build_model`):
+      * ``bw_max``  -- maximize bandwidth subject to ``total_cells >= C``.
+      * ``cap_max`` -- maximize capacity subject to a per-array access-latency
+        budget ``sum_dev <= t_max`` (the ``C`` target is then ignored, kept only
+        for reporting).
+      * ``lat_min`` -- minimize the per-array access latency ``sum_dev`` subject
+        to ``total_cells >= C`` (``t_max`` is ignored).
+    ``t_max`` is used only by ``cap_max``; ``C`` is a binding floor for ``bw_max``
+    and ``lat_min``. ``BW_min`` (if > 0) adds a sustained-bandwidth floor
+    ``BW >= BW_min`` -- most useful in ``cap_max``/``lat_min``, where BW is
+    otherwise an unconstrained auxiliary (redundant, but allowed, in ``bw_max``).
+    """
     C: float          # target capacity                [bit]
     A: float          # footprint (area per layer)     [um^2]
     L: int            # layer budget                   [layers]
     t_layer: float    # physical thickness per layer   [um]
     P_max: float      # cooling power-density budget    [uW/um^2 == W/mm^2]
+    mode: str         # 'bw_max' (max BW @ C) | 'cap_max' (max capacity @ latency t_max) | 'lat_min' (min per-array latency @ C)
+    t_max: float      # per-array access-latency budget [ns] (cap_max only; sum_dev <= t_max)
+    BW_min: float     # sustained-bandwidth floor [bit/ns] (0 = disabled; BW >= BW_min)
 
     def __post_init__(self):
         assert self.C > 0, f"C must be > 0, got {self.C}"
@@ -37,6 +53,9 @@ class ProblemSpec:
         self.L = int(self.L)
         assert self.t_layer > 0, f"t_layer must be > 0, got {self.t_layer}"
         assert self.P_max > 0, f"P_max must be > 0, got {self.P_max}"
+        assert self.mode in ("bw_max", "cap_max", "lat_min"), f"mode must be 'bw_max'|'cap_max'|'lat_min', got {self.mode!r}"
+        assert self.t_max > 0, f"t_max must be > 0, got {self.t_max}"
+        assert self.BW_min >= 0, f"BW_min must be >= 0 (0 disables the floor), got {self.BW_min}"
 
     @property
     def vol_budget(self) -> float:
@@ -339,8 +358,21 @@ def build_model(problem: ProblemSpec, tech: TechSpec, bounds: Bounds) -> pyo.Con
     m.cyc_sa = pyo.Constraint(expr=m.t_cycle >= m.t_SA + tech.t_sw)          # latch+switch floor
     m.cyc_dev = pyo.Constraint(expr=m.t_cycle * m.N_share >= m.sum_dev)      # [eq:cycle_amortization]
     m.bw_def = pyo.Constraint(expr=m.BW * m.t_cycle == m.N_SA)               # [eq:bandwidth_def]
+    # Sustained-bandwidth floor. Off (BW_min=0) by default; when set it pins BW
+    # (an unconstrained auxiliary in cap_max/lat_min) to at least BW_min, forcing
+    # enough sharing/parallelism to sustain that throughput. Applied in every mode
+    # (redundant but harmless under the bw_max objective).
+    if problem.BW_min > 0:
+        m.bw_min = pyo.Constraint(expr=m.BW >= problem.BW_min)               # [bit/ns]
     m.width_cap = pyo.Constraint(expr=m.b_acc <= m.N_BL)                     # cannot sense more bits than bitlines
-    m.capacity = pyo.Constraint(expr=m.total_cells >= problem.C)             # meet target capacity
+    # Objective-mode split (mode validated in ProblemSpec.__post_init__):
+    #   bw_max / lat_min pin capacity as a floor (total_cells >= C);
+    #   cap_max instead caps the per-array serial access latency (sum_dev <= t_max).
+    # The matching objective is set at the end of the function.
+    if problem.mode == "cap_max":
+        m.lat_cap = pyo.Constraint(expr=m.sum_dev <= problem.t_max)          # per-array access-latency budget
+    else:  # bw_max, lat_min
+        m.capacity = pyo.Constraint(expr=m.total_cells >= problem.C)         # meet target capacity
     # Per-component peripheral volume (shared by the volume + power-density
     # constraints). Two scaling classes, set by whether a block is time-shared
     # across the N_share arrays that share one peripheral set:
@@ -396,5 +428,13 @@ def build_model(problem: ProblemSpec, tech: TechSpec, bounds: Bounds) -> pyo.Con
         <= (problem.P_max / (problem.L * problem.t_layer)) * vol_used)     # [eq:power_density]
 
     # ---- objective ---------------------------------------------------------
-    m.bandwidth = pyo.Objective(expr=m.BW, sense=pyo.maximize)
+    # cap_max and lat_min leave t_cycle/BW as feasible-but-unoptimized
+    # auxiliaries (any value satisfying the cyc_* floors and the power budget) --
+    # the meaningful outputs there are capacity + geometry + per-array latency.
+    if problem.mode == "bw_max":
+        m.objective = pyo.Objective(expr=m.BW, sense=pyo.maximize)
+    elif problem.mode == "cap_max":
+        m.objective = pyo.Objective(expr=m.total_cells, sense=pyo.maximize)
+    else:  # lat_min
+        m.objective = pyo.Objective(expr=m.sum_dev, sense=pyo.minimize)
     return m
